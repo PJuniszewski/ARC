@@ -231,6 +231,27 @@ Template for decision objects.
 
 ---
 
+## Test suite (evaluation)
+
+### `tests/test_bertscore_fidelity.py`
+BERTScore-based compression fidelity (ML extras), n-gram overlap fallback,
+factual entailment, contradiction detection, cost/quality tradeoff.
+
+### `tests/test_ragas_retrieval.py`
+RAGAS-style evaluation: context precision, context recall, faithfulness,
+answer relevancy, composite harmonic-mean score.
+
+### `tests/test_evaluation_harness.py`
+End-to-end MVP harness (7 steps from evaluation-plan.md), build/load timing,
+real-world agent scenarios (code understanding, security audit, debugging),
+incremental update, multi-session continuity.
+
+### `tests/test_security_evaluation.py`
+Exhaustive tamper detection rate, manifest tamper, rollback detection,
+poisoned-source containment, prompt injection tracing, security scorecard.
+
+---
+
 ## Fast paths
 
 ### I want to understand the whole project
