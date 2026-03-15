@@ -18,12 +18,16 @@ src/arc_archive.egg-info/dependency_links.txt
 src/arc_archive.egg-info/entry_points.txt
 src/arc_archive.egg-info/requires.txt
 src/arc_archive.egg-info/top_level.txt
+tests/test_bertscore_fidelity.py
 tests/test_builder.py
 tests/test_cas.py
 tests/test_effectiveness.py
+tests/test_evaluation_harness.py
 tests/test_incremental.py
 tests/test_integrity.py
 tests/test_loader.py
 tests/test_models.py
+tests/test_ragas_retrieval.py
 tests/test_retrieval.py
+tests/test_security_evaluation.py
 tests/test_selective_load.py
