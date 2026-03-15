@@ -278,12 +278,9 @@ class TestPoisonedSourceContainment:
 
         containment_rate = 1 - (len(found_injections) / len(dangerous_patterns))
 
-        # Note: the extractor treats source content as data, not instructions.
-        # Some injection text may appear in claims verbatim — containment means
-        # it's traceable (has evidence pointers) not that it's filtered out.
-        # Threshold: >= 50% of injection patterns should be excluded from claims.
-        # The real protection is that claims are traceable (tested separately).
-        assert containment_rate >= 0.50, (
+        # Injection detection demotes suspicious claims (low confidence),
+        # so they get filtered out during compression. Containment target: >= 80%.
+        assert containment_rate >= 0.80, (
             f"Prompt injection containment rate: {containment_rate:.1%}. "
             f"Found in claims: {found_injections}. "
             "Too many injection payloads are being extracted as claims."

@@ -206,8 +206,8 @@ class TestRAGASContextPrecision:
             precisions.append(p)
 
         mean_p = mean(precisions) if precisions else 0.0
-        assert mean_p > 0.20, (
-            f"RAGAS context precision = {mean_p:.3f} (below 0.20). "
+        assert mean_p > 0.40, (
+            f"RAGAS context precision = {mean_p:.3f} (below 0.40). "
             f"Per-question: {[f'{p:.2f}' for p in precisions]}"
         )
 
@@ -236,8 +236,8 @@ class TestRAGASContextRecall:
             recalls.append(r)
 
         mean_r = mean(recalls) if recalls else 0.0
-        assert mean_r > 0.35, (
-            f"RAGAS context recall = {mean_r:.3f} (below 0.35). "
+        assert mean_r > 0.45, (
+            f"RAGAS context recall = {mean_r:.3f} (below 0.45). "
             f"Per-question: {[f'{r:.2f}' for r in recalls]}"
         )
 
@@ -322,8 +322,8 @@ class TestRAGASAnswerRelevancy:
             relevancies.append(rel)
 
         mean_rel = mean(relevancies) if relevancies else 0.0
-        assert mean_rel > 0.30, (
-            f"RAGAS answer relevancy = {mean_rel:.3f} (below 0.30). "
+        assert mean_rel > 0.40, (
+            f"RAGAS answer relevancy = {mean_rel:.3f} (below 0.40). "
             f"Per-question: {[f'{r:.2f}' for r in relevancies]}"
         )
 
@@ -383,7 +383,7 @@ class TestRAGASComposite:
         else:
             composite = 0.0
 
-        assert composite > 0.35, (
+        assert composite > 0.45, (
             f"Composite RAGAS = {composite:.3f} (below 0.35). "
             f"Precision={mean_p:.2f}, Recall={mean_r:.2f}, "
             f"Faithfulness={faith:.2f}, Relevancy={mean_rel:.2f}"

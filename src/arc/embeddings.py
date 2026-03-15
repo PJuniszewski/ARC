@@ -151,7 +151,32 @@ class TfidfEmbedder:
         return np.array([self.embed(t) for t in texts], dtype=np.float32)
 
     def _tokenize(self, text: str) -> list[str]:
-        return [w.lower() for w in re.findall(r'\b\w{2,}\b', text)]
+        words = re.findall(r'\b\w{2,}\b', text.lower())
+        return [self._stem(w) for w in words]
+
+    @staticmethod
+    def _stem(word: str) -> str:
+        """Minimal suffix stemmer for TF-IDF vocabulary matching."""
+        if word.endswith('ing') and len(word) > 5:
+            stem = word[:-3]
+            if len(stem) > 2 and stem[-1] == stem[-2]:
+                stem = stem[:-1]
+            return stem
+        if word.endswith('tion') and len(word) > 5:
+            return word[:-4]
+        if word.endswith('ness') and len(word) > 5:
+            return word[:-4]
+        if word.endswith('ment') and len(word) > 5:
+            return word[:-4]
+        if word.endswith('ies') and len(word) > 4:
+            return word[:-3] + 'y'
+        if word.endswith('es') and len(word) > 4:
+            return word[:-2]
+        if word.endswith('s') and not word.endswith('ss') and len(word) > 3:
+            return word[:-1]
+        if word.endswith('ed') and len(word) > 4:
+            return word[:-2]
+        return word
 
     def _hash_embed(self, text: str) -> np.ndarray:
         """Hash-based embedding for unfitted embedder."""

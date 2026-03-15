@@ -197,8 +197,14 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
         embedder.fit(all_texts)
     query_vec = embedder.embed(task)
 
-    # Search
-    results = loaded.vector_store.search(query_vec, top_k=max(5, len(loaded.claims) // 3))
+    # Search with quality threshold to filter noise
+    raw_results = loaded.vector_store.search(query_vec, top_k=max(5, len(loaded.claims) // 3))
+
+    MIN_SIMILARITY = 0.10
+    results = [(id, score, text) for id, score, text in raw_results if score >= MIN_SIMILARITY]
+    if not results and raw_results:
+        results = raw_results[:3]  # fallback: always return at least top 3
+
     relevant_ids = {r[0] for r in results}
 
     # Include claims found by search + any high-confidence claims

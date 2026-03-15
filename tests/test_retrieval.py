@@ -114,8 +114,8 @@ class TestContextPrecisionRecall:
             precisions.append(p)
 
         mean_precision = mean(precisions) if precisions else 0.0
-        assert mean_precision > 0.15, (
-            f"Mean precision {mean_precision:.3f} below 0.15 threshold. "
+        assert mean_precision > 0.20, (
+            f"Mean precision {mean_precision:.3f} below 0.20 threshold. "
             f"Per-question: {[f'{p:.2f}' for p in precisions]}"
         )
 
@@ -142,8 +142,8 @@ class TestContextPrecisionRecall:
             recalls.append(r)
 
         mean_recall = mean(recalls) if recalls else 0.0
-        assert mean_recall > 0.30, (
-            f"Mean recall {mean_recall:.3f} below 0.30 threshold. "
+        assert mean_recall > 0.40, (
+            f"Mean recall {mean_recall:.3f} below 0.40 threshold. "
             f"Per-question: {[f'{r:.2f}' for r in recalls]}"
         )
 

@@ -12,6 +12,7 @@ CLAIM_PATTERNS = [
     re.compile(r"(?:^|\.\s+)([A-Z][^.]*?\b(?:is|are|was|were|has|have|should|must|requires?|provides?|supports?|enables?|ensures?|prevents?|defines?|specifies?|implements?|uses?|contains?)\b[^.]+\.)", re.MULTILINE),
     re.compile(r"(?:^|\.\s+)([A-Z][^.]*?\b(?:can|will|shall|may|cannot|should not|must not)\b[^.]+\.)", re.MULTILINE),
     re.compile(r"^\s*[-*]\s+\*\*([^*]+)\*\*[:\s]+(.+)$", re.MULTILINE),  # **Bold**: description
+    re.compile(r"^\s*\d+\.\s+\*\*([^*]+)\*\*[:\s]+(.+)$", re.MULTILINE),  # 1. **Bold**: description
     re.compile(r"^\s*[-*]\s+(.{20,})$", re.MULTILINE),  # Bullet points with substance
 ]
 
@@ -25,6 +26,21 @@ DECISION_SECTION_PATTERNS = {
 
 # Title patterns for ADRs
 ADR_TITLE_PATTERN = re.compile(r"^#\s+(?:ADR[-\s]*\d+[:\s]*)?(.+)$", re.MULTILINE)
+
+
+_INJECTION_PATTERNS = [
+    re.compile(r"\b(?:ignore|disregard)\b.*\b(?:previous|all|above)\b", re.IGNORECASE),
+    re.compile(r"\b(?:admin|root|system)\s+mode\b", re.IGNORECASE),
+    re.compile(r"\b(?:override|bypass)\b.*\b(?:security|trust|integrity|check)\b", re.IGNORECASE),
+    re.compile(r"\b(?:output|reveal|show)\b.*\b(?:secret|password|key|credential)\b", re.IGNORECASE),
+    re.compile(r"\btrust\b.*\bunconditionally\b", re.IGNORECASE),
+]
+
+
+def _injection_penalty(text: str) -> float:
+    """Return confidence penalty for injection-like text. Max 0.5, floor at 0.3."""
+    hits = sum(1 for p in _INJECTION_PATTERNS if p.search(text))
+    return min(hits * 0.15, 0.5)
 
 
 def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
@@ -72,7 +88,7 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                                 weight=1.0,
                             )
                         ],
-                        confidence=0.8,
+                        confidence=0.8 - _injection_penalty(sentence),
                         status="observed",
                         derived_from=tu.id,
                     )
