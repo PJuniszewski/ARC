@@ -22,7 +22,7 @@ ARC should be reasoned about as five layers:
    - ingest
    - normalize
    - extract semantics
-   - compress
+   - deduplicate
    - write blobs
    - emit manifest
 
@@ -126,7 +126,7 @@ Builder should handle:
 - normalization
 - chunking
 - extraction of claims and decisions
-- semantic compression with traceability
+- deduplication of claims (full fidelity, no lossy compression — see ADR-0004)
 - writing immutable blobs
 - generating manifest
 - producing provenance metadata

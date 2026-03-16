@@ -21,7 +21,6 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("--out", required=True, help="Output archive path")
     build_parser.add_argument("--id", default=None, help="Archive ID")
     build_parser.add_argument("--version", default="0.1.0", help="Archive version")
-    build_parser.add_argument("--compression", type=float, default=0.5, help="Compression budget (0-1)")
     build_parser.add_argument("--parent", default=None, help="Parent archive for incremental build")
 
     # arc inspect
@@ -74,7 +73,6 @@ def _cmd_build(args) -> int:
         output_dir=args.out,
         archive_id=args.id,
         archive_version=args.version,
-        compression_budget=args.compression,
         parent_archive=args.parent,
     )
 
@@ -84,8 +82,8 @@ def _cmd_build(args) -> int:
         print(f"  Text units: {len(result.text_units)}")
         print(f"  Claims: {len(result.claims)}")
         print(f"  Decisions: {len(result.decisions)}")
-        if result.compression:
-            print(f"  Compression ratio: {result.compression.compression_ratio:.1f}x")
+        if result.deduplication and result.deduplication.duplicates_removed > 0:
+            print(f"  Duplicates removed: {result.deduplication.duplicates_removed}")
         print(f"  Layers: {len(result.manifest.layers)}")
         return 0
     else:

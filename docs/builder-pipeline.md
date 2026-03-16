@@ -47,13 +47,14 @@ Extract:
 - entities or relations if needed
 - evidence pointers
 
-### 5. Semantic compression
-Reduce bulk while preserving traceability.
+### 5. Deduplication
+Remove duplicate and contested claims while preserving full fidelity.
 
 Rules:
-- never compress without source linkage
-- distinguish extracted fact from generated summary
-- preserve enough evidence to audit results
+- deduplicate by normalized text (near-identical claims)
+- exclude contested (injection-flagged) claims
+- never discard unique claims based on relevance scoring
+- selective loading is the loader's job, not the builder's (see ADR-0004)
 
 ### 6. Index generation
 Optionally create:

@@ -1,4 +1,4 @@
-"""Builder pipeline — 8-stage: ingest → normalize → chunk → extract → compress → index → assemble → validate."""
+"""Builder pipeline — 8-stage: ingest → normalize → chunk → extract → deduplicate → index → assemble → validate."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from .cas import ContentAddressedStore, sha256_digest
-from .compressor import CompressionResult, compress_claims
+from .compressor import DeduplicationResult, deduplicate_claims
 from .embeddings import TfidfEmbedder, VectorStore, get_embedder
 from .extractor import extract_claims, extract_decisions
 from .manifest import build_manifest, validate_manifest, write_manifest_to_cas
@@ -38,7 +38,7 @@ class BuildResult:
     text_units: list[TextUnit]
     claims: list[Claim]
     decisions: list[Decision]
-    compression: Optional[CompressionResult] = None
+    deduplication: Optional[DeduplicationResult] = None
     errors: list[str] = field(default_factory=list)
     valid: bool = True
 
@@ -48,7 +48,6 @@ def build_archive(
     output_dir: str | Path,
     archive_id: Optional[str] = None,
     archive_version: str = "0.1.0",
-    compression_budget: float = 0.5,
     parent_archive: Optional[str | Path] = None,
 ) -> BuildResult:
     """Build an ARC archive from source directory.
@@ -58,7 +57,7 @@ def build_archive(
     2. Normalize: detect file types, extract structure
     3. Chunk: produce TextUnit objects with provenance
     4. Extract: claims and decisions
-    5. Compress: semantic compression within budget
+    5. Deduplicate: remove duplicate claims, exclude contested
     6. Index: generate embeddings
     7. Assemble: write blobs to CAS, build manifest
     8. Validate: verify all references
@@ -81,7 +80,6 @@ def build_archive(
     # Initialize provenance
     provenance = BuildProvenance(parameters={
         "source_dir": str(source_dir),
-        "compression_budget": compression_budget,
     })
 
     # === Stage 1: Ingest ===
@@ -94,18 +92,18 @@ def build_archive(
     claims = extract_claims(text_units)
     decisions = extract_decisions(text_units)
 
-    # === Stage 5: Compress ===
-    compression = compress_claims(claims, text_units, budget=compression_budget)
-    compressed_claims = compression.compressed_claims
+    # === Stage 5: Deduplicate ===
+    dedup = deduplicate_claims(claims)
+    deduped_claims = dedup.claims
 
     # === Stage 6: Index (embeddings) ===
     embedder = get_embedder(dimensions=256)
-    all_texts = [tu.content for tu in text_units] + [c.text for c in compressed_claims]
+    all_texts = [tu.content for tu in text_units] + [c.text for c in deduped_claims]
     if all_texts:
         embedder.fit(all_texts)
 
     vector_store = VectorStore(index_info=embedder.get_index_info())
-    for claim in compressed_claims:
+    for claim in deduped_claims:
         vec = embedder.embed(claim.text)
         vector_store.add(claim.id, vec, claim.text, {"kind": claim.kind})
 
@@ -126,9 +124,9 @@ def build_archive(
         required=True,
     ))
 
-    # Claims layer (compressed)
+    # Claims layer (deduplicated)
     claims_data = json.dumps(
-        [c.to_dict() for c in compressed_claims], indent=2, sort_keys=True
+        [c.to_dict() for c in deduped_claims], indent=2, sort_keys=True
     ).encode()
     claims_digest = cas.store_blob(claims_data)
     layers.append(Layer(
@@ -194,7 +192,7 @@ def build_archive(
 
     # Check all evidence pointers reference valid source units
     su_ids = {tu.id for tu in text_units}
-    for claim in compressed_claims:
+    for claim in deduped_claims:
         for ev in claim.evidence:
             if ev.source_unit_id not in su_ids:
                 errors.append(f"Claim '{claim.id}' references unknown source unit '{ev.source_unit_id}'")
@@ -205,9 +203,9 @@ def build_archive(
             manifest=manifest,
             resources=resources,
             text_units=text_units,
-            claims=compressed_claims,
+            claims=deduped_claims,
             decisions=decisions,
-            compression=compression,
+            deduplication=dedup,
             errors=errors,
             valid=False,
         )
@@ -220,9 +218,9 @@ def build_archive(
         manifest=manifest,
         resources=resources,
         text_units=text_units,
-        claims=compressed_claims,
+        claims=deduped_claims,
         decisions=decisions,
-        compression=compression,
+        deduplication=dedup,
         valid=True,
     )
 

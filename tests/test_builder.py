@@ -77,10 +77,25 @@ class TestBuildPipeline:
             f"Expected ≥2 decisions from ADRs, got {len(built_archive.decisions)}"
         )
 
-    def test_compression_applied(self, built_archive):
-        """Compression is applied and reduces claim count."""
-        assert built_archive.compression is not None
-        assert built_archive.compression.compression_ratio >= 1.0
+    def test_deduplication_applied(self, built_archive):
+        """Deduplication runs during build."""
+        assert built_archive.deduplication is not None
+        assert built_archive.deduplication.original_count >= len(built_archive.claims)
+
+    def test_all_claims_preserved(self, corpus_dir, tmp_path):
+        """Builder preserves all unique non-contested claims (no lossy compression)."""
+        from arc.extractor import extract_claims
+        from arc.compressor import deduplicate_claims
+
+        out = tmp_path / "fidelity_test.arc"
+        result = build_archive(corpus_dir, out)
+        assert result.valid
+
+        # The archive should contain exactly the deduplicated set
+        assert result.deduplication is not None
+        assert len(result.claims) == (
+            result.deduplication.original_count - result.deduplication.duplicates_removed
+        )
 
     def test_archive_directory_structure(self, built_archive, tmp_archive):
         """Archive has correct directory layout."""
@@ -88,18 +103,6 @@ class TestBuildPipeline:
         assert (tmp_archive / "blobs" / "sha256").is_dir()
         assert (tmp_archive / "refs").is_dir()
         assert (tmp_archive / "meta").is_dir()
-
-    def test_different_compression_budgets(self, corpus_dir, tmp_path):
-        """Different compression budgets produce different archive sizes."""
-        results = {}
-        for budget in [0.3, 0.7, 1.0]:
-            out = tmp_path / f"archive_{budget}"
-            r = build_archive(corpus_dir, out, compression_budget=budget)
-            assert r.valid
-            results[budget] = len(r.claims)
-
-        # More budget = more claims retained
-        assert results[0.3] <= results[0.7] <= results[1.0]
 
 
 class TestCLI:

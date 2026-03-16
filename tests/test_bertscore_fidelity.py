@@ -1,4 +1,4 @@
-"""BERTScore-based compression fidelity tests.
+"""BERTScore-based fidelity tests.
 
 Closes the gap between TF-IDF proxy metrics and real semantic similarity.
 Uses bert-score when available (ml extras), otherwise falls back to
@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from arc.builder import build_archive
-from arc.compressor import _count_tokens, compress_claims
+from arc.compressor import _count_tokens
 from arc.embeddings import TfidfEmbedder
 
 
@@ -172,14 +172,14 @@ def _try_bertscore():
 # ---------------------------------------------------------------------------
 
 class TestBERTScoreFidelity:
-    """Compression fidelity using BERTScore or tight n-gram fallback."""
+    """Claim fidelity using BERTScore or tight n-gram fallback."""
 
     @pytest.mark.ml
     def test_bertscore_semantic_preservation(self, corpus_dir, tmp_path):
-        """Real BERTScore: compressed claims preserve meaning above 0.80 F1.
+        """Real BERTScore: extracted claims preserve meaning above 0.80 F1.
 
         Methodology:
-        1. Build archive with compression
+        1. Build archive
         2. For each claim, compute BERTScore against its source text unit
         3. Assert mean F1 > 0.80
 
@@ -190,7 +190,7 @@ class TestBERTScoreFidelity:
             pytest.skip("bert-score not installed (pip install arc-archive[ml])")
 
         archive_path = tmp_path / "bert_fidelity.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         # Pair claims with source text units via evidence pointers
@@ -222,7 +222,7 @@ class TestBERTScoreFidelity:
         Threshold: mean bigram overlap > 0.10 between claims and sources.
         """
         archive_path = tmp_path / "ngram_fidelity.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         su_by_id = {tu.id: tu for tu in result.text_units}
@@ -245,7 +245,7 @@ class TestBERTScoreFidelity:
 
 
 class TestFactualConsistency:
-    """Prove: Compressed claims don't introduce facts absent from sources."""
+    """Prove: Extracted claims don't introduce facts absent from sources."""
 
     def test_factual_entailment(self, corpus_dir, tmp_path):
         """Claims should be grounded in source: significant terms must trace back.
@@ -258,7 +258,7 @@ class TestFactualConsistency:
         This catches hallucinated numbers, invented terms, and fabricated facts.
         """
         archive_path = tmp_path / "entailment.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         su_by_id = {tu.id: tu for tu in result.text_units}
@@ -279,63 +279,55 @@ class TestFactualConsistency:
         )
 
     def test_no_contradictions_in_claims(self, corpus_dir, tmp_path):
-        """Compressed claim set should contain zero internal contradictions."""
+        """Claim set should contain zero internal contradictions."""
         archive_path = tmp_path / "contradictions.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         claim_texts = [c.text for c in result.claims]
         contradictions = _contradiction_count(claim_texts)
         assert contradictions == 0, (
-            f"Found {contradictions} contradictions in compressed claims. "
-            "Compression should never introduce conflicting assertions."
+            f"Found {contradictions} contradictions in claims. "
+            "Extraction should never introduce conflicting assertions."
         )
 
 
-class TestCompressionCostEfficiency:
-    """Prove: Compression achieves quantified token savings."""
+class TestCostEfficiency:
+    """Prove: Selective loading achieves quantified token savings."""
 
-    def test_token_reduction_with_fidelity_bound(self, corpus_dir, tmp_path):
-        """Compression ratio >= 2x while maintaining bigram overlap > 0.05.
+    def test_selective_loading_reduces_tokens(self, corpus_dir, tmp_path):
+        """Loader-side selective loading achieves meaningful token reduction.
 
-        This is the key cost/quality tradeoff: we want significant token reduction
-        without dropping below a minimum fidelity floor.
+        Since the builder preserves full fidelity, token reduction is the loader's job.
         """
+        from arc.loader import load
+
         archive_path = tmp_path / "cost_efficiency.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
-        original_tokens = sum(_count_tokens(tu.content) for tu in result.text_units)
-        compressed_tokens = sum(_count_tokens(c.text) for c in result.claims)
-        assert compressed_tokens > 0
+        full_tokens = sum(_count_tokens(c.text) for c in result.claims)
+        assert full_tokens > 0
 
-        ratio = original_tokens / compressed_tokens
-        assert ratio >= 2.0, f"Compression ratio {ratio:.1f}x below 2.0x"
+        loaded = load(archive_path, task="What hash algorithm does ARC use?")
+        if loaded.rejected:
+            pytest.skip("Load rejected")
 
-        # Verify fidelity floor
-        original_text = " ".join(tu.content for tu in result.text_units)
-        compressed_text = " ".join(c.text for c in result.claims)
-        bigram_overlap = _ngram_overlap(original_text, compressed_text, n=2)
-        assert bigram_overlap > 0.05, (
-            f"Bigram overlap {bigram_overlap:.3f} below 0.05 fidelity floor. "
-            "Compression is too aggressive."
+        selective_tokens = sum(_count_tokens(c.text) for c in loaded.claims)
+        reduction = 1 - (selective_tokens / full_tokens) if full_tokens > 0 else 0
+        assert reduction > 0.10, (
+            f"Selective loading only reduces {reduction:.1%} of tokens. "
+            f"Full: {full_tokens}, Selective: {selective_tokens}."
         )
 
-    def test_compression_budget_respects_bounds(self, corpus_dir, tmp_path):
-        """Different budgets produce proportional claim counts.
-
-        Budget 0.3 should produce fewer claims than budget 0.7.
-        """
-        results = {}
-        for budget in [0.3, 0.5, 0.7]:
-            out = tmp_path / f"budget_{budget}"
-            r = build_archive(corpus_dir, out, compression_budget=budget)
-            assert r.valid
-            results[budget] = len(r.claims)
-
-        assert results[0.3] <= results[0.5] <= results[0.7], (
-            f"Claim counts not monotonic with budget: "
-            f"0.3→{results[0.3]}, 0.5→{results[0.5]}, 0.7→{results[0.7]}"
+    def test_full_fidelity_preserves_all_claims(self, corpus_dir, tmp_path):
+        """Builder preserves all unique non-contested claims (no lossy compression)."""
+        out = tmp_path / "full_fidelity"
+        r = build_archive(corpus_dir, out)
+        assert r.valid
+        assert r.deduplication is not None
+        assert len(r.claims) == (
+            r.deduplication.original_count - r.deduplication.duplicates_removed
         )
 
     def test_mounted_bytes_per_task(self, corpus_dir, tmp_path):
@@ -346,7 +338,7 @@ class TestCompressionCostEfficiency:
         from arc.loader import load
 
         archive_path = tmp_path / "mounted.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         total_claim_bytes = sum(len(c.text.encode()) for c in result.claims)

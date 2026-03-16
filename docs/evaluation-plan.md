@@ -5,7 +5,7 @@
 ARC is only worth building if it measurably improves one or more of these:
 
 - context quality
-- fidelity under compression
+- extraction fidelity
 - agent reliability
 - security and trust
 - cost / latency efficiency
@@ -21,12 +21,12 @@ Questions:
 - can manifests be validated?
 - can missing / tampered blobs be detected?
 
-### 2. Compression fidelity
+### 2. Extraction fidelity
 
 Questions:
-- do claims preserve meaning?
-- do summaries omit critical facts?
-- does semantic compression degrade task performance?
+- do claims preserve meaning from source documents?
+- does the builder retain all unique non-contested claims?
+- does deduplication remove only true duplicates?
 
 ### 3. Retrieval and task usefulness
 

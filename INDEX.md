@@ -79,7 +79,7 @@ Read when you need:
 Read when you need:
 - ingestion
 - extraction
-- semantic compression
+- deduplication
 - archive build stages
 
 ### `docs/loader-runtime.md`
@@ -137,6 +137,9 @@ Defines why ARC is artifact-first rather than runtime-memory-first.
 
 ### `docs/adr/ADR-0003-separate-memory-and-index.md`
 Defines why `MEMORY.md` and `INDEX.md` are separate.
+
+### `docs/adr/ADR-0004-no-lossy-compression.md`
+Defines why the builder preserves full fidelity (no lossy compression). Selective loading is the loader's job.
 
 Use ADRs when something is accepted and should stop being debated casually.
 
@@ -234,8 +237,8 @@ Template for decision objects.
 ## Test suite (evaluation)
 
 ### `tests/test_bertscore_fidelity.py`
-BERTScore-based compression fidelity (ML extras), n-gram overlap fallback,
-factual entailment, contradiction detection, cost/quality tradeoff.
+BERTScore-based fidelity (ML extras), n-gram overlap fallback,
+factual entailment, contradiction detection, selective loading efficiency.
 
 ### `tests/test_ragas_retrieval.py`
 RAGAS-style evaluation: context precision, context recall, faithfulness,

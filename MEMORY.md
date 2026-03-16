@@ -102,7 +102,7 @@ Instead:
    - builder-signed?
    - multi-party attested?
 
-6. How aggressive can semantic compression be before trust collapses?
+6. ~~How aggressive can semantic compression be before trust collapses?~~ Resolved: no lossy compression in builder (ADR-0004). Selective loading is the loader's job.
 
 ---
 
@@ -149,7 +149,7 @@ Define trust model:
 
 Define evaluation harness:
 
-- compression fidelity
+- extraction fidelity
 - retrieval quality
 - security regression
 

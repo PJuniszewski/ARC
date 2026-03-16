@@ -39,4 +39,4 @@
 | Archive representation | Single file vs directory vs OCI vs all three | Each has tradeoffs for portability vs tooling |
 | Selective load policy | How does the agent choose what to mount? | Task labels, dependency graph, manifest hints, runtime scoring |
 | Trust boundary for builder | Who/what do we trust produced the archive? | Human-reviewed, builder-signed, multi-party attested |
-| Semantic compression aggressiveness | Evaluation harness now exists — empirical thresholds: bigram overlap > 0.10, entailment > 0.50, compression ratio >= 2x | Thresholds are calibrated against TF-IDF; upgrade to BERTScore with `pip install arc-archive[ml]` for tighter bounds |
+| ~~Semantic compression aggressiveness~~ | Resolved: no lossy compression in builder (ADR-0004). Builder preserves full fidelity; selective loading is the loader's responsibility. | N/A |

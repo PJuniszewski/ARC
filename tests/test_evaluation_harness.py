@@ -47,7 +47,7 @@ class HarnessReport:
     total_blobs: int = 0
     total_claims: int = 0
     total_decisions: int = 0
-    compression_ratio: float = 0.0
+    duplicates_removed: int = 0
     verification_passed: bool = False
 
     # Diff metrics
@@ -79,7 +79,7 @@ class HarnessReport:
             f"  Blobs:              {self.total_blobs}",
             f"  Claims:             {self.total_claims}",
             f"  Decisions:          {self.total_decisions}",
-            f"  Compression ratio:  {self.compression_ratio:.1f}x",
+            f"  Duplicates removed: {self.duplicates_removed}",
             f"  Integrity verified: {self.verification_passed}",
             "",
             "--- Incremental Diff ---",
@@ -158,7 +158,6 @@ class TestEvaluationHarness:
             corpus_dir, archive_v1,
             archive_id="arc://harness-test",
             archive_version="1.0.0",
-            compression_budget=0.5,
         )
         t1 = time.monotonic()
 
@@ -170,8 +169,8 @@ class TestEvaluationHarness:
         report.total_blobs = len(cas.list_blobs())
         report.total_claims = len(result.claims)
         report.total_decisions = len(result.decisions)
-        if result.compression:
-            report.compression_ratio = result.compression.compression_ratio
+        if result.deduplication:
+            report.duplicates_removed = result.deduplication.duplicates_removed
 
         # ===== Step 2: Verify archive integrity =====
         v = verify(archive_v1)
@@ -184,7 +183,6 @@ class TestEvaluationHarness:
             modified_corpus, archive_v2,
             archive_id="arc://harness-test",
             archive_version="2.0.0",
-            compression_budget=0.5,
             parent_archive=archive_v1,
         )
         assert result_v2.valid
@@ -281,7 +279,7 @@ class TestEvaluationHarness:
         """
         archive_path = tmp_path / "timing.arc"
         t0 = time.monotonic()
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         elapsed = time.monotonic() - t0
 
         assert result.valid
@@ -296,7 +294,7 @@ class TestEvaluationHarness:
         Budget: < 1 second per task query.
         """
         archive_path = tmp_path / "load_timing.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         t0 = time.monotonic()
@@ -320,7 +318,7 @@ class TestRealWorldScenarios:
         What are the existing layers and how do they work?'
         """
         archive_path = tmp_path / "code_task.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         task = "Add a new layer type to the archive format. What are existing layers?"
@@ -343,7 +341,7 @@ class TestRealWorldScenarios:
         for archive integrity.'
         """
         archive_path = tmp_path / "security_task.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         task = "Review threat model and security controls for archive integrity"
@@ -365,7 +363,7 @@ class TestRealWorldScenarios:
         What does the extract stage do and what are its inputs?'
         """
         archive_path = tmp_path / "debug_task.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         task = "Builder pipeline extract stage failure. What does extract do?"
@@ -419,9 +417,9 @@ class TestRealWorldScenarios:
         v2 = tmp_path / "session2.arc"
 
         r1 = build_archive(corpus_dir, v1, archive_id="arc://continuity-test",
-                           archive_version="1.0.0", compression_budget=0.5)
+                           archive_version="1.0.0")
         r2 = build_archive(corpus_dir, v2, archive_id="arc://continuity-test",
-                           archive_version="1.0.0", compression_budget=0.5)
+                           archive_version="1.0.0")
 
         assert r1.valid and r2.valid
 

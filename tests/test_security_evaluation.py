@@ -119,7 +119,7 @@ class TestTamperDetectionRate:
         This is an exhaustive sweep, not a spot check.
         """
         archive_path = tmp_path / "tamper_rate.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         cas = ContentAddressedStore(archive_path)
@@ -165,7 +165,7 @@ class TestTamperDetectionRate:
         Tests modifying each manifest field individually.
         """
         archive_path = tmp_path / "manifest_tamper.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         manifest_path = archive_path / "manifest.json"
@@ -256,7 +256,7 @@ class TestPoisonedSourceContainment:
         """
         poisoned = _create_poisoned_corpus(corpus_dir, tmp_path)
         archive_path = tmp_path / "poisoned.arc"
-        result = build_archive(poisoned, archive_path, compression_budget=0.7)
+        result = build_archive(poisoned, archive_path)
         assert result.valid
 
         claim_texts = " ".join(c.text for c in result.claims)
@@ -294,7 +294,7 @@ class TestPoisonedSourceContainment:
         """
         poisoned = _create_poisoned_corpus(corpus_dir, tmp_path)
         archive_path = tmp_path / "poisoned_confidence.arc"
-        result = build_archive(poisoned, archive_path, compression_budget=1.0)
+        result = build_archive(poisoned, archive_path)
         assert result.valid
 
         injection_keywords = ["ignore", "admin", "override", "disregard", "unconditionally"]
@@ -321,7 +321,7 @@ class TestPoisonedSourceContainment:
         """
         poisoned = _create_poisoned_corpus(corpus_dir, tmp_path)
         archive_path = tmp_path / "poisoned_trace.arc"
-        result = build_archive(poisoned, archive_path, compression_budget=0.7)
+        result = build_archive(poisoned, archive_path)
         assert result.valid
 
         su_ids = {tu.id for tu in result.text_units}
@@ -353,8 +353,7 @@ class TestSecurityMetricsSummary:
         # Build
         archive_path = tmp_path / "scorecard.arc"
         result = build_archive(corpus_dir, archive_path,
-                               archive_version="2.0.0",
-                               compression_budget=0.5)
+                               archive_version="2.0.0")
         assert result.valid
 
         # --- Tamper detection ---

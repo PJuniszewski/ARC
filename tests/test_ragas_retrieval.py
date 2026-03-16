@@ -191,7 +191,7 @@ class TestRAGASContextPrecision:
         3. Assert mean precision > 0.30
         """
         archive_path = tmp_path / "ragas_precision.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         precisions = []
@@ -221,7 +221,7 @@ class TestRAGASContextRecall:
         Threshold: mean recall > 0.40.
         """
         archive_path = tmp_path / "ragas_recall.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         recalls = []
@@ -248,7 +248,7 @@ class TestRAGASContextRecall:
         Threshold: mean recall > 0.30.
         """
         archive_path = tmp_path / "ragas_multihop.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         recalls = []
@@ -284,7 +284,7 @@ class TestRAGASFaithfulness:
         This catches hallucinated claims not grounded in any source.
         """
         archive_path = tmp_path / "ragas_faithful.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.5)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         claim_texts = [c.text for c in result.claims]
@@ -307,7 +307,7 @@ class TestRAGASAnswerRelevancy:
         Threshold: mean relevancy > 0.40.
         """
         archive_path = tmp_path / "ragas_relevancy.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         relevancies = []
@@ -340,7 +340,7 @@ class TestRAGASComposite:
         This is the headline number: a single metric for retrieval quality.
         """
         archive_path = tmp_path / "ragas_composite.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.7)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         # Precision

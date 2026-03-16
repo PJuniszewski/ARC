@@ -26,7 +26,7 @@ class TestSelectiveLoadPrecision:
         4. Assert precision > 0.30
         """
         archive_path = tmp_path / "selective.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         task = "security threats, attacks, and trust verification"
@@ -59,7 +59,7 @@ class TestSelectiveLoadPrecision:
     def test_format_task_loads_format_claims(self, corpus_dir, tmp_path):
         """Academic: Format-related task loads format-relevant claims."""
         archive_path = tmp_path / "format_sel.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         task = "archive format, manifest schema, blob storage layout"
@@ -90,7 +90,7 @@ class TestSelectiveLoadPrecision:
         4. Assert recall > 0.40
         """
         archive_path = tmp_path / "recall_sel.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         full = load(archive_path)
@@ -127,7 +127,7 @@ class TestSelectiveLoadPrecision:
         3. Assert overlap is less than full set (differentiation)
         """
         archive_path = tmp_path / "diff_tasks.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         security_loaded = load(archive_path, task="security threats and attacks")
@@ -163,7 +163,7 @@ class TestSelectiveVsFull:
         delivers less noise to the agent.
         """
         archive_path = tmp_path / "token_reduction.arc"
-        result = build_archive(corpus_dir, archive_path, compression_budget=0.8)
+        result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
         full = load(archive_path)

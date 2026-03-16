@@ -50,7 +50,6 @@ def built_archive(corpus_dir, tmp_archive):
         output_dir=tmp_archive,
         archive_id="arc://test-corpus",
         archive_version="1.0.0",
-        compression_budget=0.5,
     )
     assert result.valid, f"Build failed: {result.errors}"
     return result
