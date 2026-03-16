@@ -186,7 +186,7 @@ def load(
 
 
 def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
-    """Filter claims by task relevance using embedding similarity."""
+    """Filter claims by task relevance using hybrid keyword + vector scoring."""
     if not loaded.vector_store or loaded.vector_store.vectors is None:
         return loaded.claims
 
@@ -197,13 +197,31 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
         embedder.fit(all_texts)
     query_vec = embedder.embed(task)
 
-    # Search with quality threshold to filter noise
-    raw_results = loaded.vector_store.search(query_vec, top_k=max(5, len(loaded.claims) // 3))
+    # Get vector similarity scores for all claims
+    raw_results = loaded.vector_store.search(query_vec, top_k=len(loaded.claims))
 
-    MIN_SIMILARITY = 0.10
-    results = [(id, score, text) for id, score, text in raw_results if score >= MIN_SIMILARITY]
-    if not results and raw_results:
-        results = raw_results[:3]  # fallback: always return at least top 3
+    # Compute keyword overlap boost using stemmed tokens
+    query_tokens = set(embedder._tokenize(task))
+
+    scored: list[tuple[str, float, str]] = []
+    for cid, vscore, text in raw_results:
+        claim_tokens = set(embedder._tokenize(text))
+        overlap = len(query_tokens & claim_tokens)
+        # Keyword boost: fraction of query terms found in claim
+        kw_boost = overlap / len(query_tokens) if query_tokens else 0.0
+        # Hybrid score: vector similarity + keyword overlap (weighted)
+        hybrid = vscore + 0.3 * kw_boost
+        scored.append((cid, hybrid, text))
+
+    # Sort by hybrid score descending
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # Take top-k with minimum score threshold
+    MIN_SCORE = 0.10
+    top_k = max(3, len(loaded.claims) // 5)  # ~20% not 33%
+    results = [(cid, s, t) for cid, s, t in scored[:top_k] if s >= MIN_SCORE]
+    if not results and scored:
+        results = scored[:3]
 
     relevant_ids = {r[0] for r in results}
 
@@ -212,7 +230,7 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     selected = []
     seen = set()
 
-    # Add vector-search matches
+    # Add hybrid-scored matches
     for cid in relevant_ids:
         if cid in claim_by_id and cid not in seen:
             selected.append(claim_by_id[cid])
