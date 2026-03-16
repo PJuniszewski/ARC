@@ -94,20 +94,33 @@ class VectorStore:
         vs.embedder_state = d.get("embedder_state", {})
         return vs
 
-    def restore_embedder(self) -> Optional[TfidfEmbedder]:
-        """Restore the TF-IDF embedder from stored state. Returns None if no state."""
-        if not self.embedder_state:
-            return None
-        vocab = self.embedder_state.get("vocab")
-        idf = self.embedder_state.get("idf")
-        if not vocab or not idf:
-            return None
-        dims = self.embedder_state.get("dimensions", 256)
-        embedder = TfidfEmbedder(dimensions=dims)
-        embedder.vocab = vocab
-        embedder.idf = idf
-        embedder.fitted = True
-        return embedder
+    def restore_embedder(self):
+        """Restore the embedder that was used at build time.
+
+        Checks index_info.model to determine the embedder type:
+        - "tfidf": restore from stored vocab/idf state
+        - other: try loading as a sentence-transformer model
+        Returns None if restoration fails.
+        """
+        # Try TF-IDF restoration from stored state
+        if self.embedder_state:
+            vocab = self.embedder_state.get("vocab")
+            idf = self.embedder_state.get("idf")
+            if vocab and idf:
+                dims = self.embedder_state.get("dimensions", 256)
+                embedder = TfidfEmbedder(dimensions=dims)
+                embedder.vocab = vocab
+                embedder.idf = idf
+                embedder.fitted = True
+                return embedder
+
+        # Try sentence-transformer based on index model name
+        if self.index_info and self.index_info.model != "tfidf":
+            st = try_load_sentence_transformer(self.index_info.model)
+            if st is not None:
+                return st
+
+        return None
 
 
 class TfidfEmbedder:
@@ -217,8 +230,17 @@ class TfidfEmbedder:
         )
 
 
-def try_load_sentence_transformer():
-    """Try to load sentence-transformers. Returns embedder or None."""
+_st_cache: dict = {}
+
+
+def try_load_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
+    """Try to load sentence-transformers. Returns embedder or None.
+
+    Caches the loaded model so repeated calls don't re-download or re-init.
+    """
+    if model_name in _st_cache:
+        return _st_cache[model_name]
+
     try:
         from sentence_transformers import SentenceTransformer
 
@@ -227,6 +249,7 @@ def try_load_sentence_transformer():
                 self.model = SentenceTransformer(model_name)
                 self.dimensions = self.model.get_sentence_embedding_dimension()
                 self.model_name = model_name
+                self.fitted = True  # pre-trained
 
             def fit(self, texts: list[str]) -> None:
                 pass  # Pre-trained, no fitting needed
@@ -244,23 +267,42 @@ def try_load_sentence_transformer():
                     version="1.0",
                 )
 
-        embedder = SentenceTransformerEmbedder()
+            # Reuse TfidfEmbedder's tokenizer for keyword matching in the
+            # loader. Embedding uses the neural model; tokenization is
+            # only for the hybrid keyword boost.
+            _stem = staticmethod(TfidfEmbedder._stem)
+
+            def _tokenize(self, text: str) -> list[str]:
+                words = re.findall(r'\b\w{2,}\b', text.lower())
+                return [self._stem(w) for w in words]
+
+        embedder = SentenceTransformerEmbedder(model_name)
         # Validate model loaded correctly (not a garbage fallback)
         test_vec = embedder.embed("test sentence")
         if test_vec is None or len(test_vec) < 32:
+            _st_cache[model_name] = None
             return None
         # all-MiniLM-L6-v2 has 384 dims; reject suspiciously small models
         if embedder.dimensions < 64:
+            _st_cache[model_name] = None
             return None
+        _st_cache[model_name] = embedder
         return embedder
     except Exception:
         # ImportError, network errors, model download failures, etc.
+        _st_cache[model_name] = None
         return None
 
 
-def get_embedder(dimensions: int = 256) -> TfidfEmbedder:
-    """Get the best available embedder. Falls back to TF-IDF."""
-    st = try_load_sentence_transformer()
-    if st is not None:
-        return st
+def get_embedder(dimensions: int = 256, force_tfidf: bool = False):
+    """Get the best available embedder. Falls back to TF-IDF.
+
+    Args:
+        dimensions: Dimensions for TF-IDF embedder (ignored for sentence-transformers).
+        force_tfidf: If True, skip sentence-transformers and use TF-IDF.
+    """
+    if not force_tfidf:
+        st = try_load_sentence_transformer()
+        if st is not None:
+            return st
     return TfidfEmbedder(dimensions=dimensions)

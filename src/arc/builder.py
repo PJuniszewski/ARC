@@ -49,6 +49,7 @@ def build_archive(
     archive_id: Optional[str] = None,
     archive_version: str = "0.1.0",
     parent_archive: Optional[str | Path] = None,
+    force_tfidf: bool = False,
 ) -> BuildResult:
     """Build an ARC archive from source directory.
 
@@ -97,7 +98,7 @@ def build_archive(
     deduped_claims = dedup.claims
 
     # === Stage 6: Index (embeddings) ===
-    embedder = get_embedder(dimensions=256)
+    embedder = get_embedder(dimensions=256, force_tfidf=force_tfidf)
     all_texts = [tu.content for tu in text_units] + [c.text for c in deduped_claims]
     if all_texts:
         embedder.fit(all_texts)
