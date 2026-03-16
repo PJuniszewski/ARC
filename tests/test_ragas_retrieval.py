@@ -328,6 +328,106 @@ class TestRAGASAnswerRelevancy:
         )
 
 
+class TestLLMJudgedRelevancy:
+    """LLM-judged answer relevancy using Claude as evaluation judge."""
+
+    @pytest.mark.llm
+    def test_llm_answer_relevancy(self, corpus_dir, tmp_path, ground_truth):
+        """LLM-judged answer relevancy for single-hop questions.
+
+        Uses Claude to evaluate semantic equivalence between retrieved
+        context and question terms. Bridges vocabulary gaps that
+        rule-based term matching cannot.
+
+        Requires: anthropic SDK + ANTHROPIC_API_KEY env var.
+        Threshold: mean > 0.60.
+        """
+        from llm_judge import _try_anthropic, llm_answer_relevancy
+
+        client = _try_anthropic()
+        if client is None:
+            pytest.skip("anthropic SDK not installed or ANTHROPIC_API_KEY not set")
+
+        archive_path = tmp_path / "ragas_llm_rel.arc"
+        result = build_archive(corpus_dir, archive_path)
+        assert result.valid
+
+        relevancies = []
+        per_question = []
+        for qa in ground_truth["single_hop_questions"]:
+            loaded = load(archive_path, task=qa["question"])
+            if loaded.rejected or not loaded.claims:
+                relevancies.append(0.0)
+                per_question.append({"question": qa["question"], "score": 0.0, "note": "no claims"})
+                continue
+
+            texts = [c.text for c in loaded.claims]
+            score = llm_answer_relevancy(texts, qa["question"], client=client)
+            if score is None:
+                pytest.skip("LLM call failed — check API key and network")
+            relevancies.append(score)
+            per_question.append({"question": qa["question"], "score": round(score, 3)})
+
+        mean_rel = mean(relevancies) if relevancies else 0.0
+
+        # Print per-question breakdown
+        print(f"\n  LLM Answer Relevancy: {mean_rel:.3f}")
+        for pq in per_question:
+            print(f"    {pq['score']:.3f}  {pq['question'][:60]}")
+
+        assert mean_rel > 0.60, (
+            f"LLM answer relevancy = {mean_rel:.3f} (below 0.60). "
+            f"Per-question: {[pq['score'] for pq in per_question]}"
+        )
+
+    @pytest.mark.llm
+    def test_llm_context_precision(self, corpus_dir, tmp_path, ground_truth):
+        """LLM-judged context precision for single-hop questions.
+
+        Uses Claude to rate each retrieved claim's relevance, then
+        computes ranked average precision.
+
+        Requires: anthropic SDK + ANTHROPIC_API_KEY env var.
+        Threshold: mean > 0.50.
+        """
+        from llm_judge import _try_anthropic, llm_context_precision
+
+        client = _try_anthropic()
+        if client is None:
+            pytest.skip("anthropic SDK not installed or ANTHROPIC_API_KEY not set")
+
+        archive_path = tmp_path / "ragas_llm_prec.arc"
+        result = build_archive(corpus_dir, archive_path)
+        assert result.valid
+
+        precisions = []
+        per_question = []
+        for qa in ground_truth["single_hop_questions"]:
+            loaded = load(archive_path, task=qa["question"])
+            if loaded.rejected or not loaded.claims:
+                precisions.append(0.0)
+                per_question.append({"question": qa["question"], "score": 0.0, "note": "no claims"})
+                continue
+
+            texts = [c.text for c in loaded.claims]
+            score = llm_context_precision(texts, qa["question"], client=client)
+            if score is None:
+                pytest.skip("LLM call failed — check API key and network")
+            precisions.append(score)
+            per_question.append({"question": qa["question"], "score": round(score, 3)})
+
+        mean_prec = mean(precisions) if precisions else 0.0
+
+        print(f"\n  LLM Context Precision: {mean_prec:.3f}")
+        for pq in per_question:
+            print(f"    {pq['score']:.3f}  {pq['question'][:60]}")
+
+        assert mean_prec > 0.50, (
+            f"LLM context precision = {mean_prec:.3f} (below 0.50). "
+            f"Per-question: {[pq['score'] for pq in per_question]}"
+        )
+
+
 class TestRAGASComposite:
     """Composite RAGAS score combining all dimensions."""
 
