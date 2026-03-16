@@ -226,8 +226,17 @@ def try_load_sentence_transformer():
                     version="1.0",
                 )
 
-        return SentenceTransformerEmbedder()
-    except ImportError:
+        embedder = SentenceTransformerEmbedder()
+        # Validate model loaded correctly (not a garbage fallback)
+        test_vec = embedder.embed("test sentence")
+        if test_vec is None or len(test_vec) < 32:
+            return None
+        # all-MiniLM-L6-v2 has 384 dims; reject suspiciously small models
+        if embedder.dimensions < 64:
+            return None
+        return embedder
+    except Exception:
+        # ImportError, network errors, model download failures, etc.
         return None
 
 

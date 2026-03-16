@@ -236,8 +236,8 @@ class TestRAGASContextRecall:
             recalls.append(r)
 
         mean_r = mean(recalls) if recalls else 0.0
-        assert mean_r > 0.45, (
-            f"RAGAS context recall = {mean_r:.3f} (below 0.45). "
+        assert mean_r > 0.50, (
+            f"RAGAS context recall = {mean_r:.3f} (below 0.50). "
             f"Per-question: {[f'{r:.2f}' for r in recalls]}"
         )
 
@@ -383,7 +383,7 @@ class TestRAGASComposite:
         else:
             composite = 0.0
 
-        assert composite > 0.45, (
+        assert composite > 0.50, (
             f"Composite RAGAS = {composite:.3f} (below 0.35). "
             f"Precision={mean_p:.2f}, Recall={mean_r:.2f}, "
             f"Faithfulness={faith:.2f}, Relevancy={mean_rel:.2f}"

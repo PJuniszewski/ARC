@@ -236,6 +236,36 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             selected.append(claim_by_id[cid])
             seen.add(cid)
 
+    # Source-level matching: match meaningful query terms against source
+    # text units. Bridges the semantic gap when claims use different
+    # vocabulary than the query (e.g., "threat categories" matches a
+    # text unit containing "threat" even though claims say "prompt injection").
+    _STOP_WORDS = {
+        'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for',
+        'of', 'and', 'or', 'an', 'be', 'by', 'it', 'do', 'no', 'not',
+        'what', 'how', 'which', 'who', 'when', 'where', 'why', 'that',
+        'this', 'with', 'from', 'has', 'have', 'does', 'did', 'will',
+        'can', 'should', 'would', 'could', 'may', 'use', 'used',
+    }
+    content_query_tokens = query_tokens - _STOP_WORDS
+    if loaded.source_units and content_query_tokens:
+        for tu in loaded.source_units:
+            tu_tokens = set(embedder._tokenize(tu.content))
+            content_overlap = content_query_tokens & tu_tokens
+            if len(content_overlap) >= 2:
+                for claim in loaded.claims:
+                    if claim.derived_from == tu.id and claim.id not in seen:
+                        selected.append(claim)
+                        seen.add(claim.id)
+
+    # Evidence graph expansion: if we matched a claim, also include sibling
+    # claims from the same source text unit.
+    matched_sources = {c.derived_from for c in selected if c.derived_from}
+    for claim in loaded.claims:
+        if claim.derived_from in matched_sources and claim.id not in seen:
+            selected.append(claim)
+            seen.add(claim.id)
+
     # Add requirements (always relevant)
     for claim in loaded.claims:
         if claim.kind == "requirement" and claim.id not in seen:
