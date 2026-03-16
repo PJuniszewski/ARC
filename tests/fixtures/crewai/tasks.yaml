@@ -1,0 +1,33 @@
+research_task:
+  description: >
+    Research the given topic thoroughly. Gather information from at least 3 credible
+    sources. Focus on recent developments (last 12 months). Identify key trends,
+    challenges, and opportunities.
+  agent: researcher
+  expected_output: >
+    A structured research brief with: executive summary, key findings (5-10 bullet points),
+    source list with credibility notes, and identified gaps in available information.
+
+writing_task:
+  description: >
+    Based on the research brief, write a comprehensive technical article. The article
+    should be 1500-2000 words, include code examples where relevant, and follow the
+    project's style conventions.
+  agent: writer
+  expected_output: >
+    A complete technical article in markdown format with proper headings, code blocks,
+    and inline citations referencing the research brief.
+  depends_on:
+    - research_task
+
+review_task:
+  description: >
+    Review the article for accuracy, clarity, and completeness. Check all claims against
+    the research brief. Verify code examples compile and produce expected output.
+    Flag any unsupported assertions.
+  agent: reviewer
+  expected_output: >
+    A review report with: overall quality score (1-10), list of issues found,
+    suggested corrections, and final recommendation (publish/revise/reject).
+  depends_on:
+    - writing_task
