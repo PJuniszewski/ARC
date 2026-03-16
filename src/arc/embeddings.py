@@ -32,6 +32,7 @@ class VectorStore:
     texts: list[str] = field(default_factory=list)
     metadata: list[dict] = field(default_factory=list)
     index_info: Optional[EmbeddingIndex] = None
+    embedder_state: dict = field(default_factory=dict)
 
     def add(self, id: str, vector: np.ndarray, text: str = "", meta: dict | None = None):
         self.ids.append(id)
@@ -76,6 +77,7 @@ class VectorStore:
                 "namespace": self.index_info.namespace,
                 "count": self.index_info.count,
             } if self.index_info else None,
+            "embedder_state": self.embedder_state,
         }
 
     @classmethod
@@ -89,7 +91,23 @@ class VectorStore:
             vs.vectors = np.array(vectors_data, dtype=np.float32)
         if d.get("index_info"):
             vs.index_info = EmbeddingIndex(**d["index_info"])
+        vs.embedder_state = d.get("embedder_state", {})
         return vs
+
+    def restore_embedder(self) -> Optional[TfidfEmbedder]:
+        """Restore the TF-IDF embedder from stored state. Returns None if no state."""
+        if not self.embedder_state:
+            return None
+        vocab = self.embedder_state.get("vocab")
+        idf = self.embedder_state.get("idf")
+        if not vocab or not idf:
+            return None
+        dims = self.embedder_state.get("dimensions", 256)
+        embedder = TfidfEmbedder(dimensions=dims)
+        embedder.vocab = vocab
+        embedder.idf = idf
+        embedder.fitted = True
+        return embedder
 
 
 class TfidfEmbedder:

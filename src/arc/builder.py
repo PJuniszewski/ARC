@@ -103,6 +103,12 @@ def build_archive(
         embedder.fit(all_texts)
 
     vector_store = VectorStore(index_info=embedder.get_index_info())
+    if hasattr(embedder, 'vocab') and hasattr(embedder, 'idf'):
+        vector_store.embedder_state = {
+            "vocab": embedder.vocab,
+            "idf": {k: round(v, 6) for k, v in embedder.idf.items()},
+            "dimensions": embedder.dimensions,
+        }
     for claim in deduped_claims:
         vec = embedder.embed(claim.text)
         vector_store.add(claim.id, vec, claim.text, {"kind": claim.kind})

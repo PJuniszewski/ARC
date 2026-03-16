@@ -43,12 +43,39 @@ def _injection_penalty(text: str) -> float:
     return min(hits * 0.15, 0.5)
 
 
+def _extract_section_context(content: str) -> str:
+    """Extract heading and intro context from a text unit.
+
+    Returns a short prefix like "Threat Categories — The ARC security model
+    addresses four primary threat categories" that preserves the categorical
+    vocabulary otherwise lost during sentence-level claim extraction.
+    """
+    parts: list[str] = []
+    for line in content.split("\n"):
+        line = line.strip()
+        if not line:
+            if parts:
+                break  # stop at first blank line after heading/intro
+            continue
+        heading = re.match(r"^#{1,3}\s+(.+)$", line)
+        if heading:
+            parts.append(heading.group(1).strip())
+            continue
+        # Framing sentence that introduces a list (ends with colon)
+        if line.endswith(":") and len(line) > 20:
+            parts.append(line.rstrip(":"))
+            break
+        break  # first real content line — stop
+    return " — ".join(parts)
+
+
 def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
     """Extract claims from text units using rule-based patterns."""
     claims: list[Claim] = []
     seen_texts: set[str] = set()
 
     for tu in text_units:
+        section_ctx = _extract_section_context(tu.content)
         sentences = _split_sentences(tu.content)
 
         for sentence in sentences:
@@ -74,13 +101,22 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                 kind = "assertion"
 
             if is_claim:
+                # Enrich claim with section context when the claim doesn't
+                # already contain the heading vocabulary.
+                claim_text = sentence
+                if section_ctx:
+                    ctx_words = set(re.findall(r"\b\w{3,}\b", section_ctx.lower()))
+                    sent_words = set(re.findall(r"\b\w{3,}\b", sentence.lower()))
+                    if not ctx_words.issubset(sent_words):
+                        claim_text = f"{section_ctx}: {sentence}"
+
                 seen_texts.add(sentence)
                 claim_id = _generate_id(f"claim:{sentence}")
-                penalty = _injection_penalty(sentence)
+                penalty = _injection_penalty(claim_text)
                 claims.append(
                     Claim(
                         id=claim_id,
-                        text=sentence,
+                        text=claim_text,
                         kind=kind,
                         evidence=[
                             EvidencePointer(

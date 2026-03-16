@@ -47,14 +47,24 @@ class LoadedArchive:
     def traverse_evidence_graph(self, query: str, hops: int = 2) -> list[Claim]:
         """Graph traversal: find claims related to query, then follow evidence links."""
         # Start with vector search if available
+        _embedder = None
         if self.vector_store and self.vector_store.vectors is not None:
-            embedder = TfidfEmbedder(dimensions=256)
-            all_texts = [c.text for c in self.claims]
-            if all_texts:
-                embedder.fit(all_texts)
-            query_vec = embedder.embed(query)
-            search_results = self.vector_store.search(query_vec, top_k=5)
+            _embedder = self.vector_store.restore_embedder()
+            if _embedder is None:
+                _embedder = TfidfEmbedder(dimensions=256)
+                all_texts = [c.text for c in self.claims]
+                if all_texts:
+                    _embedder.fit(all_texts)
+            query_vec = _embedder.embed(query)
+            search_results = self.vector_store.search(query_vec, top_k=8)
             seed_ids = {r[0] for r in search_results}
+            # Keyword seeding: add claims sharing 3+ stemmed tokens with query
+            query_tokens = set(_embedder._tokenize(query))
+            for claim in self.claims:
+                if claim.id not in seed_ids:
+                    claim_tokens = set(_embedder._tokenize(claim.text))
+                    if len(query_tokens & claim_tokens) >= 3:
+                        seed_ids.add(claim.id)
         else:
             # Fallback to text search
             seed_claims = self.flat_search(query, top_k=5)
@@ -67,9 +77,10 @@ class LoadedArchive:
             for ev in claim.evidence:
                 su_to_claims.setdefault(ev.source_unit_id, []).append(claim.id)
 
-        # BFS traversal
+        # BFS traversal with relevance filter
         visited = set(seed_ids)
         frontier = set(seed_ids)
+        _bfs_query_tokens = set(_embedder._tokenize(query)) if _embedder else set()
 
         for _ in range(hops):
             next_frontier: set[str] = set()
@@ -77,6 +88,11 @@ class LoadedArchive:
                 claim = claim_by_id.get(claim_id)
                 if not claim:
                     continue
+                # Skip expansion from claims sharing zero query tokens
+                if _bfs_query_tokens:
+                    claim_tokens = set(_embedder._tokenize(claim.text))
+                    if not (_bfs_query_tokens & claim_tokens):
+                        continue
                 # Follow evidence pointers to find co-located claims
                 for ev in claim.evidence:
                     related = su_to_claims.get(ev.source_unit_id, [])
@@ -190,11 +206,13 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     if not loaded.vector_store or loaded.vector_store.vectors is None:
         return loaded.claims
 
-    # Build embedder from loaded claims
-    embedder = get_embedder(dimensions=256)
-    all_texts = [c.text for c in loaded.claims]
-    if all_texts:
-        embedder.fit(all_texts)
+    # Prefer restored embedder (aligned with build-time vocabulary)
+    embedder = loaded.vector_store.restore_embedder()
+    if embedder is None:
+        embedder = get_embedder(dimensions=256)
+        all_texts = [c.text for c in loaded.claims]
+        if all_texts:
+            embedder.fit(all_texts)
     query_vec = embedder.embed(task)
 
     # Get vector similarity scores for all claims
@@ -218,7 +236,7 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
 
     # Take top-k with minimum score threshold
     MIN_SCORE = 0.10
-    top_k = max(3, len(loaded.claims) // 5)  # ~20% not 33%
+    top_k = max(3, len(loaded.claims) // 10)  # ~10%
     results = [(cid, s, t) for cid, s, t in scored[:top_k] if s >= MIN_SCORE]
     if not results and scored:
         results = scored[:3]
@@ -252,27 +270,115 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
         for tu in loaded.source_units:
             tu_tokens = set(embedder._tokenize(tu.content))
             content_overlap = content_query_tokens & tu_tokens
-            if len(content_overlap) >= 2:
+            if len(content_overlap) >= 3:
                 for claim in loaded.claims:
                     if claim.derived_from == tu.id and claim.id not in seen:
                         selected.append(claim)
                         seen.add(claim.id)
 
-    # Evidence graph expansion: if we matched a claim, also include sibling
-    # claims from the same source text unit.
-    matched_sources = {c.derived_from for c in selected if c.derived_from}
+    # Evidence graph expansion: only expand siblings from high-confidence
+    # sources (those that had a claim in the top-k vector results).
+    high_conf_sources = {
+        claim_by_id[cid].derived_from
+        for cid in relevant_ids
+        if cid in claim_by_id and claim_by_id[cid].derived_from
+    }
     for claim in loaded.claims:
-        if claim.derived_from in matched_sources and claim.id not in seen:
+        if claim.derived_from in high_conf_sources and claim.id not in seen:
             selected.append(claim)
             seen.add(claim.id)
 
-    # Add requirements (always relevant)
+    # Add requirements that share query tokens (not all requirements)
     for claim in loaded.claims:
         if claim.kind == "requirement" and claim.id not in seen:
-            selected.append(claim)
-            seen.add(claim.id)
+            req_tokens = set(embedder._tokenize(claim.text))
+            if content_query_tokens & req_tokens:
+                selected.append(claim)
+                seen.add(claim.id)
 
     return selected
+
+
+def restore_sources(
+    archive_path: str | Path,
+    output_dir: str | Path,
+) -> dict:
+    """Restore original source files from archive.
+
+    Reads the source-units layer, retrieves content blobs, and writes
+    files to output_dir preserving relative paths from resource locators.
+
+    Returns:
+        {restored_files: list[str], total_bytes: int}
+    """
+    archive_path = Path(archive_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    cas = ContentAddressedStore(archive_path)
+    manifest = read_manifest_from_cas(cas)
+    if manifest is None:
+        return {"restored_files": [], "total_bytes": 0, "error": "Missing manifest"}
+
+    # Load source-units layer to get resource locators and content digests
+    loaded = load(archive_path, layers=["source-units"])
+    if loaded.rejected:
+        return {"restored_files": [], "total_bytes": 0, "error": loaded.reason}
+
+    # Group text units by resource_id to reconstruct files
+    # We need the Resource objects too — read provenance for locators
+    provenance_data = cas.read_json("provenance.json", subdir="refs")
+    if not provenance_data:
+        return {"restored_files": [], "total_bytes": 0, "error": "Missing provenance"}
+
+    # Build locator→digest map from provenance source_inventory
+    source_inventory = provenance_data.get("source_inventory", [])
+    locator_to_digest: dict[str, str] = {}
+    for src in source_inventory:
+        locator_to_digest[src["locator"]] = src["digest"]
+
+    # Group text units by resource, ordered by span
+    from collections import defaultdict
+    units_by_resource: dict[str, list] = defaultdict(list)
+    for tu in loaded.source_units:
+        units_by_resource[tu.resource_id].append(tu)
+
+    # Sort each group by span start
+    for rid in units_by_resource:
+        units_by_resource[rid].sort(key=lambda tu: tu.span[0])
+
+    # For each resource in provenance, reconstruct the file from text units
+    restored_files = []
+    total_bytes = 0
+
+    # We also need locator→resource_id map. Build it from the ingestion pattern:
+    # resource_id = _generate_id(f"resource:{locator}")
+    from .models import _generate_id as gen_id
+    locator_to_resource_id: dict[str, str] = {}
+    for locator in locator_to_digest:
+        rid = gen_id(f"resource:{locator}")
+        locator_to_resource_id[locator] = rid
+
+    for locator, resource_id in locator_to_resource_id.items():
+        units = units_by_resource.get(resource_id, [])
+        if not units:
+            continue
+
+        # Reconstruct file content from text units
+        content = "\n\n".join(tu.content for tu in units)
+
+        # Write to output preserving relative path
+        out_path = output_dir / locator
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+
+        restored_files.append(locator)
+        total_bytes += len(content.encode("utf-8"))
+
+    return {
+        "restored_files": sorted(restored_files),
+        "total_bytes": total_bytes,
+    }
 
 
 def _version_lt(a: str, b: str) -> bool:

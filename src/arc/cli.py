@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     diff_parser.add_argument("archive_b", help="Second archive")
     diff_parser.add_argument("--json", action="store_true", help="JSON output")
 
+    # arc restore
+    restore_parser = subparsers.add_parser("restore", help="Restore source files from archive")
+    restore_parser.add_argument("archive", help="Archive path")
+    restore_parser.add_argument("--out", required=True, help="Output directory")
+
     args = parser.parse_args(argv)
 
     if not args.command:
@@ -61,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_load(args)
     elif args.command == "diff":
         return _cmd_diff(args)
+    elif args.command == "restore":
+        return _cmd_restore(args)
 
     return 1
 
@@ -194,6 +201,24 @@ def _cmd_diff(args) -> int:
     else:
         print(result.summary())
 
+    return 0
+
+
+def _cmd_restore(args) -> int:
+    from .loader import restore_sources
+
+    result = restore_sources(
+        archive_path=args.archive,
+        output_dir=args.out,
+    )
+
+    if result.get("error"):
+        print(f"Restore failed: {result['error']}", file=sys.stderr)
+        return 1
+
+    print(f"Restored {len(result['restored_files'])} files ({result['total_bytes']:,} bytes)")
+    for f in result["restored_files"]:
+        print(f"  {f}")
     return 0
 
 
