@@ -534,3 +534,69 @@ class TestComprehensiveScorecard:
                 f"Poisoned confidence ({poisoned_avg_conf:.4f}) > "
                 f"corpus avg ({corpus_avg_conf:.4f})"
             )
+
+
+class TestProductionQualityGate:
+    """Hard quality gate for production builds with sentence-transformers.
+
+    Skips when sentence-transformers is unavailable (TF-IDF-only environments).
+    These thresholds are calibrated against sentence-transformer scores and
+    should not be lowered without an ADR.
+    """
+
+    def test_production_retrieval_quality(self, corpus_dir, tmp_path, ground_truth):
+        """Production gate: composite RAGAS > 0.85 with sentence-transformers."""
+        from arc.embeddings import try_load_sentence_transformer
+
+        if try_load_sentence_transformer() is None:
+            pytest.skip("sentence-transformers not installed — TF-IDF fallback only")
+
+        archive_path = tmp_path / "prod_gate.arc"
+        result = build_archive(corpus_dir, archive_path)
+        assert result.valid
+
+        precisions = []
+        recalls = []
+        relevancies = []
+
+        for qa in ground_truth["single_hop_questions"]:
+            loaded = load(archive_path, task=qa["question"])
+            if loaded.rejected or not loaded.claims:
+                precisions.append(0.0)
+                recalls.append(0.0)
+                relevancies.append(0.0)
+                continue
+
+            texts = [c.text for c in loaded.claims]
+            precisions.append(
+                _context_precision(texts, qa["answer"], qa["relevant_keywords"])
+            )
+            recalls.append(
+                _context_recall(texts, qa["answer"], qa["relevant_keywords"])
+            )
+            relevancies.append(
+                _answer_relevancy(texts, qa["question"])
+            )
+
+        claim_texts = [c.text for c in result.claims]
+        source_texts = [tu.content for tu in result.text_units]
+        faith = _faithfulness(claim_texts, source_texts)
+
+        mean_p = mean(precisions)
+        mean_r = mean(recalls)
+        mean_rel = mean(relevancies)
+
+        dims = [mean_p, mean_r, faith, mean_rel]
+        nonzero = [d for d in dims if d > 0]
+        composite = len(nonzero) / sum(1.0 / d for d in nonzero) if nonzero else 0.0
+
+        print(
+            f"\n  Production gate: Composite={composite:.3f} "
+            f"P={mean_p:.3f} R={mean_r:.3f} F={faith:.3f} Rel={mean_rel:.3f}"
+        )
+
+        assert mean_p > 0.75, f"Context precision {mean_p:.3f} below production threshold 0.75"
+        assert mean_r > 0.75, f"Context recall {mean_r:.3f} below production threshold 0.75"
+        assert mean_rel > 0.60, f"Answer relevancy {mean_rel:.3f} below production threshold 0.60"
+        assert faith > 0.90, f"Faithfulness {faith:.3f} below production threshold 0.90"
+        assert composite > 0.85, f"Composite {composite:.3f} below production threshold 0.85"

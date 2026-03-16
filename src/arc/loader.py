@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 
@@ -194,9 +197,23 @@ def load(
         elif layer.type == "index.embeddings":
             loaded.vector_store = VectorStore.from_dict(data)
 
+    logger.info(
+        "loaded archive=%s layers=%d claims=%d source_units=%d decisions=%d",
+        loaded.manifest.archive_id,
+        len(loaded.manifest.layers),
+        len(loaded.claims),
+        len(loaded.source_units),
+        len(loaded.decisions),
+    )
+
     # Task-based filtering: use embeddings to select relevant claims
     if task and loaded.vector_store and loaded.claims:
+        total_before = len(loaded.claims)
         loaded.claims = _filter_by_task(loaded, task)
+        logger.info(
+            "filtered claims for task=%r: %d → %d",
+            task[:80], total_before, len(loaded.claims),
+        )
 
     return loaded
 
@@ -208,6 +225,8 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
 
     # Prefer restored embedder (aligned with build-time vocabulary)
     embedder = loaded.vector_store.restore_embedder()
+    embedder_type = type(embedder).__name__ if embedder else "none"
+    logger.debug("embedder restored: %s", embedder_type)
     if embedder is None:
         embedder = get_embedder(dimensions=256)
         all_texts = [c.text for c in loaded.claims]
@@ -326,9 +345,20 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
 
     # Hard cap: if expansion added too many claims, keep the highest-scored
     MAX_TOTAL = 12
+    pre_cap = len(selected)
     if len(selected) > MAX_TOTAL:
         selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
         selected = selected[:MAX_TOTAL]
+
+    if selected:
+        top_score = max(score_by_id.get(c.id, 0) for c in selected)
+        min_score = min(score_by_id.get(c.id, 0) for c in selected)
+        logger.debug(
+            "filter result: %d selected (capped from %d), "
+            "score range [%.3f, %.3f], primary=%d expansion=%d",
+            len(selected), pre_cap, min_score, top_score,
+            len(relevant_ids), pre_cap - len(relevant_ids),
+        )
 
     return selected
 
