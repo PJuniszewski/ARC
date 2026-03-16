@@ -14,6 +14,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CORPUS_DIR = FIXTURES_DIR / "corpus"
 GROUND_TRUTH_PATH = FIXTURES_DIR / "ground_truth.json"
 AGENT_GROUND_TRUTH_PATH = FIXTURES_DIR / "agent_ground_truth.json"
+EXTERNAL_GROUND_TRUTH_PATH = FIXTURES_DIR / "external_ground_truth.json"
 
 
 @pytest.fixture
@@ -32,6 +33,12 @@ def ground_truth():
 def agent_ground_truth():
     """Load agent evaluation ground truth data."""
     return json.loads(AGENT_GROUND_TRUTH_PATH.read_text())
+
+
+@pytest.fixture
+def external_ground_truth():
+    """Load external corpus ground truth data (aider + crewai)."""
+    return json.loads(EXTERNAL_GROUND_TRUTH_PATH.read_text())
 
 
 @pytest.fixture

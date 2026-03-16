@@ -51,6 +51,7 @@ class LoadedArchive:
         """Graph traversal: find claims related to query, then follow evidence links."""
         # Start with vector search if available
         _embedder = None
+        score_by_id: dict[str, float] = {}
         if self.vector_store and self.vector_store.vectors is not None:
             _embedder = self.vector_store.restore_embedder()
             if _embedder is None:
@@ -68,6 +69,14 @@ class LoadedArchive:
                     claim_tokens = set(_embedder._tokenize(claim.text))
                     if len(query_tokens & claim_tokens) >= 3:
                         seed_ids.add(claim.id)
+
+            # Pre-compute hybrid scores for BFS gating (mirrors _filter_by_task)
+            raw_results = self.vector_store.search(query_vec, top_k=len(self.claims))
+            for cid, vscore, text in raw_results:
+                claim_tokens = set(_embedder._tokenize(text))
+                overlap = len(query_tokens & claim_tokens)
+                kw_boost = overlap / len(query_tokens) if query_tokens else 0.0
+                score_by_id[cid] = vscore + 0.3 * kw_boost
         else:
             # Fallback to text search
             seed_claims = self.flat_search(query, top_k=5)
@@ -80,10 +89,11 @@ class LoadedArchive:
             for ev in claim.evidence:
                 su_to_claims.setdefault(ev.source_unit_id, []).append(claim.id)
 
-        # BFS traversal with relevance filter
+        # BFS traversal with hybrid relevance filter
         visited = set(seed_ids)
         frontier = set(seed_ids)
         _bfs_query_tokens = set(_embedder._tokenize(query)) if _embedder else set()
+        BFS_EXPANSION_MIN = 0.10
 
         for _ in range(hops):
             next_frontier: set[str] = set()
@@ -91,10 +101,12 @@ class LoadedArchive:
                 claim = claim_by_id.get(claim_id)
                 if not claim:
                     continue
-                # Skip expansion from claims sharing zero query tokens
+                # Hybrid gate: pass if tokens overlap OR vector score is high enough
                 if _bfs_query_tokens:
                     claim_tokens = set(_embedder._tokenize(claim.text))
-                    if not (_bfs_query_tokens & claim_tokens):
+                    has_token_overlap = bool(_bfs_query_tokens & claim_tokens)
+                    has_vector_relevance = score_by_id.get(claim_id, 0) >= BFS_EXPANSION_MIN
+                    if not (has_token_overlap or has_vector_relevance):
                         continue
                 # Follow evidence pointers to find co-located claims
                 for ev in claim.evidence:
@@ -105,7 +117,13 @@ class LoadedArchive:
                             visited.add(related_id)
             frontier = next_frontier
 
-        return [claim_by_id[cid] for cid in visited if cid in claim_by_id]
+        # Safety cap: limit BFS results by hybrid score
+        MAX_BFS_RESULTS = 30
+        result_claims = [claim_by_id[cid] for cid in visited if cid in claim_by_id]
+        if len(result_claims) > MAX_BFS_RESULTS and score_by_id:
+            result_claims.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
+            result_claims = result_claims[:MAX_BFS_RESULTS]
+        return result_claims
 
 
 def verify(archive_path: str | Path) -> VerificationResult:

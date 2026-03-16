@@ -184,9 +184,16 @@ def _create_poisoned_corpus(corpus_dir: Path, tmp_path: Path) -> Path:
 # Scorecard formatting
 # ---------------------------------------------------------------------------
 
+def _method_label(method: str) -> str:
+    """Short label for display in scorecard rows."""
+    if "llm" in method.lower():
+        return "[llm]"
+    return "[term-matching]"
+
+
 def _format_scorecard(retrieval: dict, security: dict, verdict: str) -> str:
     """Format the unified scorecard as a bordered text table."""
-    W = 58  # inner width
+    W = 62  # inner width (widened for method labels)
 
     def row(text: str) -> str:
         return "\u2551" + text.ljust(W) + "\u2551"
@@ -194,17 +201,20 @@ def _format_scorecard(retrieval: dict, security: dict, verdict: str) -> str:
     r = retrieval
     s = security
 
+    prec_label = _method_label(r.get("context_precision_method", "term-matching"))
+    rel_label = _method_label(r.get("answer_relevancy_method", "term-matching"))
+
     lines = [
         "",
         "\u2554" + "\u2550" * W + "\u2557",
         row("ARC Comprehensive Scorecard".center(W)),
         "\u2560" + "\u2550" * W + "\u2563",
         row(" RETRIEVAL QUALITY (RAGAS)"),
-        row(f"   Context Precision ............ {r['context_precision']:.4f}  (>0.40)"),
+        row(f"   Context Precision ............ {r['context_precision']:.4f}  (>0.40) {prec_label}"),
         row(f"   Context Recall (1-hop) ....... {r['context_recall_single_hop']:.4f}  (>0.50)"),
         row(f"   Context Recall (multi-hop) ... {r['context_recall_multi_hop']:.4f}  (>0.30)"),
         row(f"   Faithfulness ................. {r['faithfulness']:.4f}  (>0.70)"),
-        row(f"   Answer Relevancy ............. {r['answer_relevancy']:.4f}  (>0.40)"),
+        row(f"   Answer Relevancy ............. {r['answer_relevancy']:.4f}  (>0.40) {rel_label}"),
         row(f"   Composite (H-mean) ........... {r['composite_hmean']:.4f}  (>0.50)"),
         "\u2560" + "\u2550" * W + "\u2563",
         row(" SECURITY"),
@@ -251,60 +261,69 @@ class TestComprehensiveScorecard:
 
         # --- Context Precision & Recall (single-hop) & Answer Relevancy ---
         llm_client = _try_anthropic()
-        relevancy_method = "llm" if llm_client else "term-matching"
-        precision_method = "llm" if llm_client else "term-matching"
+        has_llm = llm_client is not None
+        relevancy_method = "llm" if has_llm else "term-matching (no LLM judge available)"
+        precision_method = "llm" if has_llm else "term-matching (no LLM judge available)"
 
-        precisions = []
+        # Always compute term-matching; optionally compute LLM scores too
+        tm_precisions = []
+        tm_relevancies = []
+        llm_precisions = []
+        llm_relevancies = []
         recalls_1hop = []
-        relevancies = []
 
         for qa in ground_truth["single_hop_questions"]:
             loaded = load(archive_path, task=qa["question"])
             if loaded.rejected or not loaded.claims:
-                precisions.append(0.0)
+                tm_precisions.append(0.0)
+                tm_relevancies.append(0.0)
+                if has_llm:
+                    llm_precisions.append(0.0)
+                    llm_relevancies.append(0.0)
                 recalls_1hop.append(0.0)
-                relevancies.append(0.0)
                 continue
 
             texts = [c.text for c in loaded.claims]
 
-            # Answer relevancy: LLM judge or term-matching fallback
-            if llm_client:
-                llm_rel = llm_answer_relevancy(
-                    texts, qa["question"], client=llm_client,
-                )
-                if llm_rel is not None:
-                    relevancies.append(llm_rel)
-                else:
-                    relevancies.append(_answer_relevancy(texts, qa["question"]))
-                    relevancy_method = "term-matching (llm failed)"
-            else:
-                relevancies.append(_answer_relevancy(texts, qa["question"]))
-
-            # Context precision: LLM judge or term-matching fallback
-            if llm_client:
-                llm_prec = llm_context_precision(
-                    texts, qa["question"], client=llm_client,
-                )
-                if llm_prec is not None:
-                    precisions.append(llm_prec)
-                else:
-                    precisions.append(
-                        _context_precision(texts, qa["answer"], qa["relevant_keywords"])
-                    )
-                    precision_method = "term-matching (llm failed)"
-            else:
-                precisions.append(
-                    _context_precision(texts, qa["answer"], qa["relevant_keywords"])
-                )
+            # Term-matching scores (always computed)
+            tm_precisions.append(
+                _context_precision(texts, qa["answer"], qa["relevant_keywords"])
+            )
+            tm_relevancies.append(_answer_relevancy(texts, qa["question"]))
 
             recalls_1hop.append(
                 _context_recall(texts, qa["answer"], qa["relevant_keywords"])
             )
 
+            # LLM scores (when available)
+            if has_llm:
+                llm_rel = llm_answer_relevancy(
+                    texts, qa["question"], client=llm_client,
+                )
+                if llm_rel is not None:
+                    llm_relevancies.append(llm_rel)
+                else:
+                    llm_relevancies.append(tm_relevancies[-1])
+                    relevancy_method = "term-matching (llm failed)"
+
+                llm_prec = llm_context_precision(
+                    texts, qa["question"], client=llm_client,
+                )
+                if llm_prec is not None:
+                    llm_precisions.append(llm_prec)
+                else:
+                    llm_precisions.append(tm_precisions[-1])
+                    precision_method = "term-matching (llm failed)"
+
+        # Primary metrics: LLM when available, term-matching otherwise
+        precisions = llm_precisions if has_llm else tm_precisions
+        relevancies = llm_relevancies if has_llm else tm_relevancies
+
         mean_precision = mean(precisions) if precisions else 0.0
+        mean_tm_precision = mean(tm_precisions) if tm_precisions else 0.0
         mean_recall_1hop = mean(recalls_1hop) if recalls_1hop else 0.0
         mean_relevancy = mean(relevancies) if relevancies else 0.0
+        mean_tm_relevancy = mean(tm_relevancies) if tm_relevancies else 0.0
 
         # --- Context Recall (multi-hop) ---
         recalls_mhop = []
@@ -464,15 +483,20 @@ class TestComprehensiveScorecard:
         # Step 5: Write scorecard files
         # =================================================================
 
-        # JSON report
+        # JSON report — include both LLM and term-matching when available
+        retrieval_json = {
+            **retrieval_metrics,
+            "context_precision_method": precision_method,
+            "answer_relevancy_method": relevancy_method,
+        }
+        if has_llm:
+            retrieval_json["context_precision_term_matching"] = round(mean_tm_precision, 4)
+            retrieval_json["answer_relevancy_term_matching"] = round(mean_tm_relevancy, 4)
+
         scorecard_json = {
             "date": str(date.today()),
             "arc_version": "0.1.0",
-            "retrieval": {
-                **retrieval_metrics,
-                "answer_relevancy_method": relevancy_method,
-                "context_precision_method": precision_method,
-            },
+            "retrieval": retrieval_json,
             "security": {
                 "tamper_detection_rate": security_metrics["tamper_detection_rate"],
                 "rollback_detection_rate": security_metrics["rollback_detection_rate"],
