@@ -26,7 +26,7 @@ def compress_claims(
     text_units: list[TextUnit],
     budget: float = 0.5,
 ) -> CompressionResult:
-    """Compress claims using TF-IDF ranking + deduplication.
+    """Compress claims using TF-IDF ranking + topic diversity + deduplication.
 
     Args:
         claims: Claims to compress
@@ -38,10 +38,13 @@ def compress_claims(
 
     original_tokens = sum(_count_tokens(c.text) for c in claims)
 
+    # Exclude contested claims (injection-flagged) from compression output
+    eligible = [c for c in claims if c.status != "contested"]
+
     # Score claims by importance (TF-IDF of claim terms vs corpus)
     corpus_texts = [tu.content for tu in text_units]
     scored = []
-    for claim in claims:
+    for claim in eligible:
         score = _tfidf_importance(claim.text, corpus_texts)
         # Boost requirements and definitions
         if claim.kind in ("requirement", "definition"):
@@ -53,7 +56,7 @@ def compress_claims(
     scored.sort(key=lambda x: x[0], reverse=True)
 
     # Select top claims within budget
-    target_count = max(1, int(len(claims) * budget))
+    target_count = max(1, int(len(eligible) * budget))
     selected: list[Claim] = []
     seen_keys: set[str] = set()
 

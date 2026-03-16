@@ -99,7 +99,7 @@ def build_archive(
     compressed_claims = compression.compressed_claims
 
     # === Stage 6: Index (embeddings) ===
-    embedder = TfidfEmbedder(dimensions=256)
+    embedder = get_embedder(dimensions=256)
     all_texts = [tu.content for tu in text_units] + [c.text for c in compressed_claims]
     if all_texts:
         embedder.fit(all_texts)

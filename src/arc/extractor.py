@@ -76,6 +76,7 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
             if is_claim:
                 seen_texts.add(sentence)
                 claim_id = _generate_id(f"claim:{sentence}")
+                penalty = _injection_penalty(sentence)
                 claims.append(
                     Claim(
                         id=claim_id,
@@ -88,8 +89,8 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                                 weight=1.0,
                             )
                         ],
-                        confidence=0.8 - _injection_penalty(sentence),
-                        status="observed",
+                        confidence=0.8 - penalty,
+                        status="contested" if penalty > 0 else "observed",
                         derived_from=tu.id,
                     )
                 )

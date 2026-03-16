@@ -10,7 +10,7 @@ from typing import Optional
 import numpy as np
 
 from .cas import ContentAddressedStore, VerificationResult
-from .embeddings import TfidfEmbedder, VectorStore
+from .embeddings import TfidfEmbedder, VectorStore, get_embedder
 from .manifest import read_manifest_from_cas, validate_manifest
 from .models import Claim, Decision, Manifest, TextUnit
 
@@ -191,7 +191,7 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
         return loaded.claims
 
     # Build embedder from loaded claims
-    embedder = TfidfEmbedder(dimensions=256)
+    embedder = get_embedder(dimensions=256)
     all_texts = [c.text for c in loaded.claims]
     if all_texts:
         embedder.fit(all_texts)
