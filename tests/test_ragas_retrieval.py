@@ -488,3 +488,63 @@ class TestRAGASComposite:
             f"Precision={mean_p:.2f}, Recall={mean_r:.2f}, "
             f"Faithfulness={faith:.2f}, Relevancy={mean_rel:.2f}"
         )
+
+
+class TestEmbedderComparison:
+    """Compare retrieval quality across embedder backends."""
+
+    @pytest.mark.parametrize("force_tfidf", [True, False], ids=["tfidf", "sentence-transformers"])
+    def test_composite_by_embedder(self, corpus_dir, tmp_path, ground_truth, force_tfidf):
+        """Composite RAGAS score parametrized by embedder.
+
+        Runs the same evaluation with both TF-IDF and sentence-transformers
+        so we have comparable numbers. TF-IDF threshold is lower (0.50)
+        since it's the zero-dependency fallback.
+        """
+        archive_path = tmp_path / "emb_cmp.arc"
+        result = build_archive(corpus_dir, archive_path, force_tfidf=force_tfidf)
+        assert result.valid
+
+        precisions = []
+        recalls = []
+        relevancies = []
+        for qa in ground_truth["single_hop_questions"]:
+            loaded = load(archive_path, task=qa["question"])
+            if loaded.rejected or not loaded.claims:
+                precisions.append(0.0)
+                recalls.append(0.0)
+                relevancies.append(0.0)
+                continue
+
+            texts = [c.text for c in loaded.claims]
+            precisions.append(
+                _context_precision(texts, qa["answer"], qa["relevant_keywords"])
+            )
+            recalls.append(
+                _context_recall(texts, qa["answer"], qa["relevant_keywords"])
+            )
+            relevancies.append(
+                _answer_relevancy(texts, qa["question"])
+            )
+
+        claim_texts = [c.text for c in result.claims]
+        source_texts = [tu.content for tu in result.text_units]
+        faith = _faithfulness(claim_texts, source_texts)
+
+        mean_p = mean(precisions) if precisions else 0.0
+        mean_r = mean(recalls) if recalls else 0.0
+        mean_rel = mean(relevancies) if relevancies else 0.0
+
+        dimensions = [mean_p, mean_r, faith, mean_rel]
+        nonzero = [d for d in dimensions if d > 0]
+        composite = len(nonzero) / sum(1.0 / d for d in nonzero) if nonzero else 0.0
+
+        embedder_name = "tfidf" if force_tfidf else "sentence-transformers"
+        print(
+            f"\n  [{embedder_name}] Composite={composite:.3f} "
+            f"P={mean_p:.3f} R={mean_r:.3f} F={faith:.3f} Rel={mean_rel:.3f}"
+        )
+
+        assert composite > 0.50, (
+            f"[{embedder_name}] Composite = {composite:.3f} (below 0.50)"
+        )
