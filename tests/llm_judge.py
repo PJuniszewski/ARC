@@ -2,13 +2,45 @@
 
 Provides LLM-based scoring for answer relevancy and context precision,
 falling back gracefully when the anthropic SDK or API key is unavailable.
+
+Results are cached in results/.llm_cache.json to avoid redundant API calls.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
+from pathlib import Path
 from typing import Optional
+
+_CACHE_PATH = Path(__file__).parent.parent / "results" / ".llm_cache.json"
+
+
+def _cache_key(func_name: str, question: str, texts: list[str]) -> str:
+    """Deterministic hash of function name + inputs.
+
+    Sorts texts so that different orderings of the same claim set produce
+    the same key (loader scoring may reorder claims between runs).
+    """
+    payload = json.dumps(
+        {"f": func_name, "q": question, "t": sorted(texts[:20])},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _load_cache() -> dict:
+    try:
+        return json.loads(_CACHE_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_cache(cache: dict) -> None:
+    _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n")
 
 
 def _try_anthropic():
@@ -40,12 +72,18 @@ def llm_answer_relevancy(
 
     Returns a float 0.0-1.0, or None if the LLM call fails.
     """
+    # Check cache first
+    key = _cache_key("relevancy", question, retrieved_texts)
+    cache = _load_cache()
+    if key in cache:
+        return cache[key]
+
     if client is None:
         client = _try_anthropic()
     if client is None:
         return None
 
-    context_block = "\n---\n".join(retrieved_texts[:20])  # cap context size
+    context_block = "\n---\n".join(retrieved_texts[:20])
     prompt = (
         "You are an evaluation judge. Given retrieved context and a question, "
         "rate from 0.0 to 1.0 how well the context enables answering the question.\n\n"
@@ -68,8 +106,13 @@ def llm_answer_relevancy(
             messages=[{"role": "user", "content": prompt}],
         )
         text = response.content[0].text.strip()
-        score = float(re.search(r"(\d+\.?\d*)", text).group(1))
-        return max(0.0, min(1.0, score))
+        match = re.search(r"(\d+\.?\d*)", text)
+        score = float(match.group(1)) if match else 0.5
+        score = max(0.0, min(1.0, score))
+
+        cache[key] = score
+        _save_cache(cache)
+        return score
     except Exception:
         return None
 
@@ -88,6 +131,12 @@ def llm_context_precision(
 
     Returns a float 0.0-1.0, or None if the LLM call fails.
     """
+    # Check cache first
+    key = _cache_key("precision", question, retrieved_texts)
+    cache = _load_cache()
+    if key in cache:
+        return cache[key]
+
     if client is None:
         client = _try_anthropic()
     if client is None:
@@ -96,7 +145,6 @@ def llm_context_precision(
     if not retrieved_texts:
         return 0.0
 
-    # Batch all claims into a single prompt
     claims_block = "\n".join(
         f"{i+1}. {text[:300]}" for i, text in enumerate(retrieved_texts[:20])
     )
@@ -120,7 +168,6 @@ def llm_context_precision(
         )
         text = response.content[0].text.strip()
 
-        # Parse Yes/No judgments
         judgments = []
         for line in text.split("\n"):
             line = line.strip()
@@ -129,13 +176,11 @@ def llm_context_precision(
             is_yes = bool(re.search(r"\byes\b", line, re.IGNORECASE))
             judgments.append(1.0 if is_yes else 0.0)
 
-        # Pad or truncate to match retrieved_texts length
         n = min(len(retrieved_texts), 20)
         while len(judgments) < n:
             judgments.append(0.0)
         judgments = judgments[:n]
 
-        # Compute ranked average precision
         cumulative = 0.0
         num_relevant = 0
         avg_precision = 0.0
@@ -146,6 +191,10 @@ def llm_context_precision(
                 precision_at_i = cumulative / (i + 1)
                 avg_precision += precision_at_i
 
-        return avg_precision / max(num_relevant, 1)
+        score = avg_precision / max(num_relevant, 1)
+
+        cache[key] = score
+        _save_cache(cache)
+        return score
     except Exception:
         return None
