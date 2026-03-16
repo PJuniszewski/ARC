@@ -234,6 +234,31 @@ Template for decision objects.
 
 ---
 
+## Source code
+
+### `src/arc/builder.py`
+8-stage build pipeline: ingest → normalize → chunk → extract → deduplicate → index → assemble → validate.
+
+### `src/arc/loader.py`
+Selective loading with hybrid vector + keyword scoring, evidence graph expansion, multi-hop BFS.
+
+### `src/arc/embeddings.py`
+Dual embedder: sentence-transformers (all-MiniLM-L6-v2) with TF-IDF fallback. VectorStore with cosine search.
+
+### `src/arc/extractor.py`
+Rule-based claim/decision extraction with section heading enrichment and injection detection.
+
+### `src/arc/models.py`
+Data models: Resource, TextUnit, Claim, Decision, EvidencePointer, Layer, Manifest.
+
+### `src/arc/cas.py`
+Content-addressed storage: SHA-256 blob store with Merkle verification.
+
+### `src/arc/compressor.py`
+Claim deduplication and contested claim exclusion.
+
+---
+
 ## Test suite (evaluation)
 
 ### `tests/test_bertscore_fidelity.py`
@@ -241,8 +266,20 @@ BERTScore-based fidelity (ML extras), n-gram overlap fallback,
 factual entailment, contradiction detection, selective loading efficiency.
 
 ### `tests/test_ragas_retrieval.py`
-RAGAS-style evaluation: context precision, context recall, faithfulness,
-answer relevancy, composite harmonic-mean score.
+RAGAS-style evaluation: context precision, context recall (1-hop + multi-hop),
+faithfulness, answer relevancy, composite harmonic-mean, embedder comparison.
+
+### `tests/test_external_ragas.py`
+RAGAS evaluation over external corpora (aider, crewai). Parametrized by embedder.
+Proves generalization beyond internal corpus.
+
+### `tests/test_comprehensive_scorecard.py`
+Unified scorecard: all RAGAS + security metrics in one report. Dual LLM/term-matching
+reporting. Production quality gate for sentence-transformers.
+
+### `tests/test_agent_eval.py`
+Behavioral evaluation: 30 tasks × 3 agents (claude-code, aider, crewai).
+IR metrics (Precision@k, Recall@k, NDCG, MRR, F1), effect sizes (Cohen's d).
 
 ### `tests/test_evaluation_harness.py`
 End-to-end MVP harness (7 steps from evaluation-plan.md), build/load timing,
@@ -252,6 +289,9 @@ incremental update, multi-session continuity.
 ### `tests/test_security_evaluation.py`
 Exhaustive tamper detection rate, manifest tamper, rollback detection,
 poisoned-source containment, prompt injection tracing, security scorecard.
+
+### `tests/test_roundtrip.py`
+Archive roundtrip: build → verify → load → restore sources → diff.
 
 ---
 
