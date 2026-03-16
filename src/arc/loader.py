@@ -235,29 +235,47 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     scored.sort(key=lambda x: x[1], reverse=True)
 
     # Take top-k with minimum score threshold
-    MIN_SCORE = 0.10
-    top_k = max(3, len(loaded.claims) // 10)  # ~10%
-    results = [(cid, s, t) for cid, s, t in scored[:top_k] if s >= MIN_SCORE]
+    MIN_SCORE = 0.15
+    TOP_K = min(8, max(3, len(loaded.claims) // 10))
+    results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= MIN_SCORE]
     if not results and scored:
         results = scored[:3]
 
     relevant_ids = {r[0] for r in results}
 
-    # Include claims found by search + any high-confidence claims
+    # Score lookup for expansion gating — every claim already has a
+    # hybrid score from the vector+keyword pass above.
+    score_by_id = {cid: s for cid, s, _ in scored}
+    EXPANSION_MIN = 0.10  # softer than primary MIN_SCORE
+
     claim_by_id = {c.id: c for c in loaded.claims}
     selected = []
     seen = set()
 
-    # Add hybrid-scored matches
+    # Add hybrid-scored matches (primary selection)
     for cid in relevant_ids:
         if cid in claim_by_id and cid not in seen:
             selected.append(claim_by_id[cid])
             seen.add(cid)
 
-    # Source-level matching: match meaningful query terms against source
-    # text units. Bridges the semantic gap when claims use different
-    # vocabulary than the query (e.g., "threat categories" matches a
-    # text unit containing "threat" even though claims say "prompt injection").
+    # Evidence graph expansion: include siblings from high-confidence
+    # sources, but only if the sibling scored above EXPANSION_MIN in
+    # the hybrid pass. This uses vector similarity to catch semantic
+    # neighbors (e.g. "tamper" near "security") that token matching misses.
+    high_conf_sources = {
+        claim_by_id[cid].derived_from
+        for cid in relevant_ids
+        if cid in claim_by_id and claim_by_id[cid].derived_from
+    }
+    for claim in loaded.claims:
+        if (claim.derived_from in high_conf_sources
+                and claim.id not in seen
+                and score_by_id.get(claim.id, 0) >= EXPANSION_MIN):
+            selected.append(claim)
+            seen.add(claim.id)
+
+    # Source-level matching: find source units matching the query, then
+    # include derived claims that scored above EXPANSION_MIN.
     _STOP_WORDS = {
         'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for',
         'of', 'and', 'or', 'an', 'be', 'by', 'it', 'do', 'no', 'not',
@@ -269,32 +287,21 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     if loaded.source_units and content_query_tokens:
         for tu in loaded.source_units:
             tu_tokens = set(embedder._tokenize(tu.content))
-            content_overlap = content_query_tokens & tu_tokens
-            if len(content_overlap) >= 3:
+            if len(content_query_tokens & tu_tokens) >= 3:
                 for claim in loaded.claims:
-                    if claim.derived_from == tu.id and claim.id not in seen:
+                    if (claim.derived_from == tu.id
+                            and claim.id not in seen
+                            and score_by_id.get(claim.id, 0) >= EXPANSION_MIN):
                         selected.append(claim)
                         seen.add(claim.id)
 
-    # Evidence graph expansion: only expand siblings from high-confidence
-    # sources (those that had a claim in the top-k vector results).
-    high_conf_sources = {
-        claim_by_id[cid].derived_from
-        for cid in relevant_ids
-        if cid in claim_by_id and claim_by_id[cid].derived_from
-    }
+    # Add requirements that scored above EXPANSION_MIN
     for claim in loaded.claims:
-        if claim.derived_from in high_conf_sources and claim.id not in seen:
+        if (claim.kind == "requirement"
+                and claim.id not in seen
+                and score_by_id.get(claim.id, 0) >= EXPANSION_MIN):
             selected.append(claim)
             seen.add(claim.id)
-
-    # Add requirements that share query tokens (not all requirements)
-    for claim in loaded.claims:
-        if claim.kind == "requirement" and claim.id not in seen:
-            req_tokens = set(embedder._tokenize(claim.text))
-            if content_query_tokens & req_tokens:
-                selected.append(claim)
-                seen.add(claim.id)
 
     return selected
 
