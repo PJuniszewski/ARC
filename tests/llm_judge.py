@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -41,6 +42,26 @@ def _load_cache() -> dict:
 def _save_cache(cache: dict) -> None:
     _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     _CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n")
+
+
+def _llm_call(client, *, model: str, max_tokens: int, prompt: str) -> Optional[str]:
+    """Call the LLM with one retry on transient errors."""
+    for attempt in range(2):
+        try:
+            response = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text.strip()
+        except Exception as e:
+            err = str(e).lower()
+            if attempt == 0 and any(w in err for w in ("rate", "timeout", "overloaded", "529")):
+                time.sleep(2)
+                continue
+            return None
+    return None
 
 
 def _try_anthropic():
@@ -98,23 +119,17 @@ def llm_answer_relevancy(
         "Return ONLY a decimal number between 0.0 and 1.0, nothing else."
     )
 
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=16,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        match = re.search(r"(\d+\.?\d*)", text)
-        score = float(match.group(1)) if match else 0.5
-        score = max(0.0, min(1.0, score))
-
-        cache[key] = score
-        _save_cache(cache)
-        return score
-    except Exception:
+    text = _llm_call(client, model=model, max_tokens=16, prompt=prompt)
+    if text is None:
         return None
+
+    match = re.search(r"(\d+\.?\d*)", text)
+    score = float(match.group(1)) if match else 0.5
+    score = max(0.0, min(1.0, score))
+
+    cache[key] = score
+    _save_cache(cache)
+    return score
 
 
 def llm_context_precision(
@@ -159,42 +174,35 @@ def llm_context_precision(
         "Format: one per line, e.g.:\n1. Yes\n2. No\n3. Yes"
     )
 
-    try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=256,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-
-        judgments = []
-        for line in text.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            is_yes = bool(re.search(r"\byes\b", line, re.IGNORECASE))
-            judgments.append(1.0 if is_yes else 0.0)
-
-        n = min(len(retrieved_texts), 20)
-        while len(judgments) < n:
-            judgments.append(0.0)
-        judgments = judgments[:n]
-
-        cumulative = 0.0
-        num_relevant = 0
-        avg_precision = 0.0
-        for i, rel in enumerate(judgments):
-            if rel > 0:
-                num_relevant += 1
-                cumulative += rel
-                precision_at_i = cumulative / (i + 1)
-                avg_precision += precision_at_i
-
-        score = avg_precision / max(num_relevant, 1)
-
-        cache[key] = score
-        _save_cache(cache)
-        return score
-    except Exception:
+    text = _llm_call(client, model=model, max_tokens=256, prompt=prompt)
+    if text is None:
         return None
+
+    judgments = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        is_yes = bool(re.search(r"\byes\b", line, re.IGNORECASE))
+        judgments.append(1.0 if is_yes else 0.0)
+
+    n = min(len(retrieved_texts), 20)
+    while len(judgments) < n:
+        judgments.append(0.0)
+    judgments = judgments[:n]
+
+    cumulative = 0.0
+    num_relevant = 0
+    avg_precision = 0.0
+    for i, rel in enumerate(judgments):
+        if rel > 0:
+            num_relevant += 1
+            cumulative += rel
+            precision_at_i = cumulative / (i + 1)
+            avg_precision += precision_at_i
+
+    score = avg_precision / max(num_relevant, 1)
+
+    cache[key] = score
+    _save_cache(cache)
+    return score
