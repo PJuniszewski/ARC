@@ -221,14 +221,35 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     # Compute keyword overlap boost using stemmed tokens
     query_tokens = set(embedder._tokenize(task))
 
+    # Content query tokens (stop words removed) for heading matching
+    _STOP_WORDS = {
+        'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for',
+        'of', 'and', 'or', 'an', 'be', 'by', 'it', 'do', 'no', 'not',
+        'what', 'how', 'which', 'who', 'when', 'where', 'why', 'that',
+        'this', 'with', 'from', 'has', 'have', 'does', 'did', 'will',
+        'can', 'should', 'would', 'could', 'may', 'use', 'used',
+    }
+    content_query_tokens = query_tokens - _STOP_WORDS
+
     scored: list[tuple[str, float, str]] = []
     for cid, vscore, text in raw_results:
         claim_tokens = set(embedder._tokenize(text))
         overlap = len(query_tokens & claim_tokens)
-        # Keyword boost: fraction of query terms found in claim
         kw_boost = overlap / len(query_tokens) if query_tokens else 0.0
-        # Hybrid score: vector similarity + keyword overlap (weighted)
-        hybrid = vscore + 0.3 * kw_boost
+
+        # Section heading boost: if the claim was enriched with a heading
+        # prefix (e.g. "Archive Classes: ..."), and most heading words
+        # appear in the query, this claim is likely a direct topical hit.
+        heading_boost = 0.0
+        if ": " in text:
+            heading = text[:text.index(": ")]
+            heading_tokens = set(embedder._tokenize(heading)) - _STOP_WORDS
+            if heading_tokens:
+                heading_match = len(heading_tokens & content_query_tokens) / len(heading_tokens)
+                if heading_match >= 0.5:
+                    heading_boost = 0.2 * heading_match
+
+        hybrid = vscore + 0.3 * kw_boost + heading_boost
         scored.append((cid, hybrid, text))
 
     # Sort by hybrid score descending
@@ -302,6 +323,12 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
                 and score_by_id.get(claim.id, 0) >= EXPANSION_MIN):
             selected.append(claim)
             seen.add(claim.id)
+
+    # Hard cap: if expansion added too many claims, keep the highest-scored
+    MAX_TOTAL = 12
+    if len(selected) > MAX_TOTAL:
+        selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
+        selected = selected[:MAX_TOTAL]
 
     return selected
 
