@@ -38,7 +38,11 @@ class EvidencePointer:
     @classmethod
     def from_dict(cls, d: dict) -> EvidencePointer:
         span = tuple(d["span"]) if d.get("span") else None
-        return cls(source_unit_id=d["source_unit_id"], span=span, weight=d.get("weight", 1.0))
+        return cls(
+            source_unit_id=d.get("source_unit_id", ""),
+            span=span,
+            weight=d.get("weight", 1.0),
+        )
 
 
 @dataclass
@@ -56,7 +60,8 @@ class Resource:
 
     @classmethod
     def from_dict(cls, d: dict) -> Resource:
-        return cls(**d)
+        known = {"id", "kind", "locator", "content_digest", "metadata"}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
 
 @dataclass
@@ -90,7 +95,10 @@ class TextUnit:
     @classmethod
     def from_dict(cls, d: dict) -> TextUnit:
         d = dict(d)
-        d["span"] = tuple(d["span"])
+        d["span"] = tuple(d.get("span", [0, 0]))
+        # Filter to known fields to tolerate future schema additions
+        known = {"id", "resource_id", "kind", "content", "span", "content_digest"}
+        d = {k: v for k, v in d.items() if k in known}
         return cls(**d)
 
 
@@ -172,6 +180,126 @@ class Decision:
         return cls(**d)
 
 
+TOOL_STATUSES = {"active", "deprecated", "experimental"}
+
+
+@dataclass
+class ToolDeclaration:
+    """A tool or capability available to an agent."""
+
+    id: str = field(default_factory=_generate_id)
+    name: str = ""
+    description: str = ""
+    parameters: list[dict] = field(default_factory=list)
+    returns: str = ""
+    constraints: list[str] = field(default_factory=list)
+    source_ref: str = ""
+    status: str = "active"
+
+    def __post_init__(self):
+        if self.status not in TOOL_STATUSES:
+            raise ValueError(f"Invalid tool status: {self.status}")
+        if self.name:
+            self.id = _generate_id(f"tool:{self.name}")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
+            "returns": self.returns,
+            "constraints": self.constraints,
+            "source_ref": self.source_ref,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> ToolDeclaration:
+        known = {"id", "name", "description", "parameters", "returns", "constraints", "source_ref", "status"}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+POLICY_EFFECTS = {"allow", "deny", "require_approval"}
+
+
+@dataclass
+class PolicyRule:
+    """A policy constraint governing agent behavior."""
+
+    id: str = field(default_factory=_generate_id)
+    scope: str = ""
+    effect: str = "deny"
+    conditions: list[str] = field(default_factory=list)
+    priority: int = 0
+    description: str = ""
+    source_ref: str = ""
+
+    def __post_init__(self):
+        if self.effect not in POLICY_EFFECTS:
+            raise ValueError(f"Invalid policy effect: {self.effect}")
+        if self.description:
+            self.id = _generate_id(f"policy:{self.scope}:{self.description}")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "scope": self.scope,
+            "effect": self.effect,
+            "conditions": self.conditions,
+            "priority": self.priority,
+            "description": self.description,
+            "source_ref": self.source_ref,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> PolicyRule:
+        known = {"id", "scope", "effect", "conditions", "priority", "description", "source_ref"}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+@dataclass
+class WorkflowStep:
+    """A step in an agent workflow — agent, task, or config."""
+
+    id: str = field(default_factory=_generate_id)
+    name: str = ""
+    kind: str = "task"
+    description: str = ""
+    agent_ref: str = ""
+    depends_on: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
+    config: dict = field(default_factory=dict)
+    expected_output: str = ""
+    source_ref: str = ""
+
+    def __post_init__(self):
+        if self.name:
+            self.id = _generate_id(f"workflow:{self.name}")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "kind": self.kind,
+            "description": self.description,
+            "agent_ref": self.agent_ref,
+            "depends_on": self.depends_on,
+            "tools": self.tools,
+            "config": self.config,
+            "expected_output": self.expected_output,
+            "source_ref": self.source_ref,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> WorkflowStep:
+        known = {
+            "id", "name", "kind", "description", "agent_ref", "depends_on",
+            "tools", "config", "expected_output", "source_ref",
+        }
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
 @dataclass
 class Layer:
     """A named layer in the archive manifest."""
@@ -188,7 +316,8 @@ class Layer:
 
     @classmethod
     def from_dict(cls, d: dict) -> Layer:
-        return cls(**d)
+        known = {"name", "type", "digest", "media_type", "required", "depends_on"}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
 
 @dataclass

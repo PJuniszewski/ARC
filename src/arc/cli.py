@@ -56,20 +56,32 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    if args.command == "build":
-        return _cmd_build(args)
-    elif args.command == "inspect":
-        return _cmd_inspect(args)
-    elif args.command == "verify":
-        return _cmd_verify(args)
-    elif args.command == "load":
-        return _cmd_load(args)
-    elif args.command == "diff":
-        return _cmd_diff(args)
-    elif args.command == "restore":
-        return _cmd_restore(args)
+    dispatch = {
+        "build": _cmd_build,
+        "inspect": _cmd_inspect,
+        "verify": _cmd_verify,
+        "load": _cmd_load,
+        "diff": _cmd_diff,
+        "restore": _cmd_restore,
+    }
+    handler = dispatch.get(args.command)
+    if handler is None:
+        return 1
 
-    return 1
+    try:
+        return handler(args)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except PermissionError as e:
+        print(f"Error: permission denied: {e}", file=sys.stderr)
+        return 1
+    except json.JSONDecodeError as e:
+        print(f"Error: invalid JSON: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 def _cmd_build(args) -> int:

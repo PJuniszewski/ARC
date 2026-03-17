@@ -3,27 +3,31 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 from .cas import ContentAddressedStore, sha256_digest
 from .compressor import DeduplicationResult, deduplicate_claims
-from .embeddings import TfidfEmbedder, VectorStore, get_embedder
-from .extractor import extract_claims, extract_decisions
+from .embeddings import VectorStore, get_embedder
+from .extractor import extract_claims, extract_decisions, extract_policies, extract_tools, extract_workflow
 from .manifest import build_manifest, validate_manifest, write_manifest_to_cas
 from .models import (
     Claim,
     Decision,
-    EvidencePointer,
     Layer,
     Manifest,
+    PolicyRule,
     Resource,
     TextUnit,
+    ToolDeclaration,
+    WorkflowStep,
     _generate_id,
-    _sha256,
 )
 from .provenance import BuildProvenance
 
@@ -39,6 +43,9 @@ class BuildResult:
     claims: list[Claim]
     decisions: list[Decision]
     deduplication: Optional[DeduplicationResult] = None
+    tools: list[ToolDeclaration] = field(default_factory=list)
+    policies: list[PolicyRule] = field(default_factory=list)
+    workflow_steps: list[WorkflowStep] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     valid: bool = True
 
@@ -92,6 +99,9 @@ def build_archive(
     # === Stage 4: Extract ===
     claims = extract_claims(text_units)
     decisions = extract_decisions(text_units)
+    tools = extract_tools(text_units, resources, source_dir)
+    policies = extract_policies(text_units, resources, source_dir)
+    workflow_steps = extract_workflow(text_units, resources, source_dir)
 
     # === Stage 5: Deduplicate ===
     dedup = deduplicate_claims(claims)
@@ -117,6 +127,14 @@ def build_archive(
     for decision in decisions:
         vec = embedder.embed(f"{decision.title} {decision.context}")
         vector_store.add(decision.id, vec, decision.title, {"kind": "decision"})
+
+    for tool in tools:
+        vec = embedder.embed(f"{tool.name} {tool.description}")
+        vector_store.add(tool.id, vec, f"tool:{tool.name}: {tool.description}", {"kind": "tool"})
+
+    for step in workflow_steps:
+        vec = embedder.embed(f"{step.name} {step.description}")
+        vector_store.add(step.id, vec, f"workflow:{step.name}: {step.description}", {"kind": "workflow"})
 
     # === Stage 7: Assemble ===
     layers = []
@@ -169,8 +187,39 @@ def build_archive(
         depends_on=["claims"],
     ))
 
+    # Operational layers
+    if tools:
+        tools_data = json.dumps([t.to_dict() for t in tools], indent=2, sort_keys=True).encode()
+        layers.append(Layer(
+            name="tools",
+            type="operational.tools",
+            digest=cas.store_blob(tools_data),
+            required=False,
+            depends_on=["source-units"],
+        ))
+
+    if policies:
+        policy_deps = ["tools"] if tools else ["source-units"]
+        policies_data = json.dumps([p.to_dict() for p in policies], indent=2, sort_keys=True).encode()
+        layers.append(Layer(
+            name="policy",
+            type="operational.policy",
+            digest=cas.store_blob(policies_data),
+            required=False,
+            depends_on=policy_deps,
+        ))
+
+    if workflow_steps:
+        workflow_data = json.dumps([w.to_dict() for w in workflow_steps], indent=2, sort_keys=True).encode()
+        layers.append(Layer(
+            name="workflow",
+            type="operational.workflow",
+            digest=cas.store_blob(workflow_data),
+            required=False,
+            depends_on=["source-units"],
+        ))
+
     # Provenance
-    prov_data = json.dumps(provenance.to_dict(), indent=2, sort_keys=True).encode()
     cas.store_json(provenance.to_dict(), "provenance.json")
 
     # Parent reference for incremental builds
@@ -213,6 +262,9 @@ def build_archive(
             claims=deduped_claims,
             decisions=decisions,
             deduplication=dedup,
+            tools=tools,
+            policies=policies,
+            workflow_steps=workflow_steps,
             errors=errors,
             valid=False,
         )
@@ -228,6 +280,9 @@ def build_archive(
         claims=deduped_claims,
         decisions=decisions,
         deduplication=dedup,
+        tools=tools,
+        policies=policies,
+        workflow_steps=workflow_steps,
         valid=True,
     )
 
@@ -273,6 +328,7 @@ def _chunk(resources: list[Resource], source_dir: Path) -> list[TextUnit]:
     for resource in resources:
         fpath = source_dir / resource.locator
         if not fpath.exists():
+            logger.warning("skipping missing file: %s", resource.locator)
             continue
 
         content = fpath.read_text(encoding="utf-8", errors="replace")
@@ -327,10 +383,9 @@ def _chunk_markdown(content: str, resource_id: str) -> list[TextUnit]:
                     content=section_content,
                     span=(section_start, section_start + len(current_section) - 1),
                 ))
-            current_section = [line]
+            current_section = []
             section_start = i
-        else:
-            current_section.append(line)
+        current_section.append(line)
 
     # Last section
     if current_section:

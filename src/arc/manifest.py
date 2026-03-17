@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
-from .cas import ContentAddressedStore, sha256_digest
+from .cas import ContentAddressedStore
 from .models import Layer, Manifest
 
 

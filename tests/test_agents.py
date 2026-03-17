@@ -344,7 +344,7 @@ class TestGenerateResults:
 
         # Print summary for visibility
         print(f"\n{'='*60}")
-        print(f"ARC 3-Agent Test Summary")
+        print("ARC 3-Agent Test Summary")
         print(f"{'='*60}")
         for r in results:
             print(f"\n{r['agent']}:")

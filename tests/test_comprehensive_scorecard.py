@@ -1,8 +1,11 @@
-"""Unified ARC Scorecard — all 10 evaluation metrics in one report.
+"""Unified ARC Scorecard — all evaluation metrics in one report.
 
 Computes and reports exact values for every ARC quality metric:
-- 6 RAGAS retrieval metrics (precision, recall, faithfulness, relevancy, composite)
+- 6 lexical retrieval metrics (precision, recall, faithfulness, relevancy, composite)
 - 5 security metrics (tamper, rollback, traceability, injection, poisoned confidence)
+
+Retrieval metrics are keyword/term-based (not RAGAS or BERTScore).
+LLM-judged metrics require anthropic SDK and are optional.
 
 Writes results to results/arc-scorecard.json and results/arc-scorecard.md.
 """
@@ -26,7 +29,7 @@ from llm_judge import _try_anthropic, llm_answer_relevancy, llm_context_precisio
 
 
 # ---------------------------------------------------------------------------
-# RAGAS metric implementations (inlined — originals are private in test_ragas)
+# Lexical retrieval metric implementations (keyword/term-based, not RAGAS)
 # ---------------------------------------------------------------------------
 
 _STOPWORDS = frozenset({
@@ -65,7 +68,7 @@ def _context_precision(
     ground_truth_answer: str,
     relevant_keywords: list[str],
 ) -> float:
-    """RAGAS context precision: ranked average precision of retrieved items."""
+    """Ranked average precision of retrieved items (keyword-based)."""
     if not retrieved_texts:
         return 0.0
 
@@ -102,7 +105,7 @@ def _context_recall(
     ground_truth_answer: str,
     required_facts: list[str],
 ) -> float:
-    """RAGAS context recall: fraction of ground-truth facts covered."""
+    """Keyword recall: fraction of ground-truth facts covered."""
     if not required_facts:
         return 1.0
 
@@ -124,7 +127,7 @@ def _context_recall(
 
 
 def _faithfulness(claim_texts: list[str], source_texts: list[str]) -> float:
-    """RAGAS faithfulness: fraction of claims grounded in source evidence."""
+    """Term-level faithfulness: fraction of claims grounded in source evidence."""
     if not claim_texts:
         return 1.0
 
@@ -145,7 +148,7 @@ def _faithfulness(claim_texts: list[str], source_texts: list[str]) -> float:
 
 
 def _answer_relevancy(retrieved_texts: list[str], question: str) -> float:
-    """RAGAS answer relevancy: question term coverage in retrieved context."""
+    """Term coverage: question term coverage in retrieved context."""
     question_terms = _extract_key_terms(question)
     if not question_terms:
         return 1.0
@@ -209,7 +212,7 @@ def _format_scorecard(retrieval: dict, security: dict, verdict: str) -> str:
         "\u2554" + "\u2550" * W + "\u2557",
         row("ARC Comprehensive Scorecard".center(W)),
         "\u2560" + "\u2550" * W + "\u2563",
-        row(" RETRIEVAL QUALITY (RAGAS)"),
+        row(" RETRIEVAL QUALITY (lexical)"),
         row(f"   Context Precision ............ {r['context_precision']:.4f}  (>0.40) {prec_label}"),
         row(f"   Context Recall (1-hop) ....... {r['context_recall_single_hop']:.4f}  (>0.50)"),
         row(f"   Context Recall (multi-hop) ... {r['context_recall_multi_hop']:.4f}  (>0.30)"),
@@ -256,7 +259,7 @@ class TestComprehensiveScorecard:
         assert result.valid, f"Build failed: {result.errors}"
 
         # =================================================================
-        # Step 2: RAGAS retrieval metrics
+        # Step 2: Lexical retrieval metrics
         # =================================================================
 
         # --- Context Precision & Recall (single-hop) & Answer Relevancy ---
@@ -569,7 +572,7 @@ class TestProductionQualityGate:
     """
 
     def test_production_retrieval_quality(self, corpus_dir, tmp_path, ground_truth):
-        """Production gate: composite RAGAS > 0.85 with sentence-transformers."""
+        """Production gate: composite retrieval > 0.85 with sentence-transformers."""
         from arc.embeddings import try_load_sentence_transformer
 
         if try_load_sentence_transformer() is None:

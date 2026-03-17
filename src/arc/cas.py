@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -92,11 +90,14 @@ class ContentAddressedStore:
         return sha256_digest(content)
 
     def read_json(self, name: str, subdir: str = "refs") -> Optional[dict | list]:
-        """Read JSON from refs/ or meta/."""
+        """Read JSON from refs/ or meta/. Returns None on missing or corrupt files."""
         target_dir = self.refs_dir if subdir == "refs" else self.meta_dir
         path = target_dir / name
         if path.exists():
-            return json.loads(path.read_text())
+            try:
+                return json.loads(path.read_text())
+            except json.JSONDecodeError:
+                return None
         return None
 
     def write_manifest(self, manifest_dict: dict) -> str:

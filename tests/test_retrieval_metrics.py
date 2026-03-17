@@ -1,14 +1,19 @@
-"""RAGAS-style retrieval evaluation metrics.
+"""Lexical retrieval quality metrics for ARC archives.
 
-Implements the core RAGAS evaluation dimensions without requiring an LLM judge:
-- Context precision: Are retrieved items relevant to the question?
-- Context recall: Does retrieved context cover the ground-truth answer?
-- Faithfulness: Are generated answers grounded in retrieved context?
-- Answer relevancy: Does the retrieved context enable answering the question?
+Rule-based evaluation of retrieval quality using keyword matching and term overlap.
+These are NOT the RAGAS framework (which uses LLM judges for semantic evaluation).
+These are simpler lexical proxies that measure:
+- Context precision: keyword/overlap match between retrieved items and ground truth
+- Context recall: keyword presence in retrieved context
+- Faithfulness: term grounding of claims in source text
+- Answer relevancy: term coverage of question terms in context
 
-References:
-- RAGAS: https://arxiv.org/abs/2309.15217
-- Adapted for rule-based evaluation (no LLM judge needed)
+Limitations:
+- Cannot detect semantic equivalence (e.g. "CAS" vs "content-addressed storage")
+- Bag-of-words overlap, not semantic understanding
+- Tested against ARC's own documentation (self-referential corpus)
+
+For LLM-judged evaluation, see TestLLMJudgedRelevancy (requires anthropic SDK).
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from arc.loader import load
 
 
 # ---------------------------------------------------------------------------
-# RAGAS-style metric implementations
+# Lexical retrieval metric implementations
 # ---------------------------------------------------------------------------
 
 def _context_precision(
@@ -32,10 +37,7 @@ def _context_precision(
     ground_truth_answer: str,
     relevant_keywords: list[str],
 ) -> float:
-    """RAGAS context precision: fraction of retrieved items that are relevant.
-
-    Ranked precision: weight earlier results higher (like RAGAS does).
-    """
+    """Ranked precision: fraction of retrieved items matching keywords or answer text."""
     if not retrieved_texts:
         return 0.0
 
@@ -74,10 +76,7 @@ def _context_recall(
     ground_truth_answer: str,
     required_facts: list[str],
 ) -> float:
-    """RAGAS context recall: fraction of ground-truth facts covered by context.
-
-    For each required fact/keyword, check if it's findable in retrieved context.
-    """
+    """Keyword recall: fraction of ground-truth keywords found in retrieved context."""
     if not required_facts:
         return 1.0
 
@@ -103,11 +102,7 @@ def _faithfulness(
     claim_texts: list[str],
     source_texts: list[str],
 ) -> float:
-    """RAGAS faithfulness: fraction of claims grounded in source evidence.
-
-    For each claim, check whether its significant terms can be traced
-    back to the source text units. A faithful claim doesn't invent facts.
-    """
+    """Term-level faithfulness: fraction of claims whose key terms appear in source text."""
     if not claim_texts:
         return 1.0
 
@@ -131,10 +126,7 @@ def _answer_relevancy(
     retrieved_texts: list[str],
     question: str,
 ) -> float:
-    """RAGAS answer relevancy: can the question be answered from retrieved context?
-
-    Measures term coverage: what fraction of question's key terms appear in context.
-    """
+    """Term coverage: fraction of question's key terms found in retrieved context."""
     question_terms = _extract_key_terms(question)
     if not question_terms:
         return 1.0
@@ -179,8 +171,8 @@ _STOPWORDS = frozenset({
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestRAGASContextPrecision:
-    """RAGAS context precision: retrieved items should be relevant."""
+class TestContextPrecision:
+    """Lexical context precision: retrieved items should match keywords."""
 
     def test_single_hop_context_precision(self, corpus_dir, tmp_path, ground_truth):
         """Context precision for single-hop factual questions.
@@ -207,13 +199,13 @@ class TestRAGASContextPrecision:
 
         mean_p = mean(precisions) if precisions else 0.0
         assert mean_p > 0.40, (
-            f"RAGAS context precision = {mean_p:.3f} (below 0.40). "
+            f"Context precision = {mean_p:.3f} (below 0.40). "
             f"Per-question: {[f'{p:.2f}' for p in precisions]}"
         )
 
 
-class TestRAGASContextRecall:
-    """RAGAS context recall: retrieved context covers ground truth."""
+class TestContextRecall:
+    """Keyword recall: retrieved context covers ground truth keywords."""
 
     def test_single_hop_context_recall(self, corpus_dir, tmp_path, ground_truth):
         """Single-hop recall: keywords from ground truth appear in context.
@@ -237,7 +229,7 @@ class TestRAGASContextRecall:
 
         mean_r = mean(recalls) if recalls else 0.0
         assert mean_r > 0.50, (
-            f"RAGAS context recall = {mean_r:.3f} (below 0.50). "
+            f"Context recall = {mean_r:.3f} (below 0.50). "
             f"Per-question: {[f'{r:.2f}' for r in recalls]}"
         )
 
@@ -265,13 +257,13 @@ class TestRAGASContextRecall:
 
         mean_r = mean(recalls) if recalls else 0.0
         assert mean_r > 0.30, (
-            f"RAGAS multi-hop recall = {mean_r:.3f} (below 0.30). "
+            f"Multi-hop recall = {mean_r:.3f} (below 0.30). "
             f"Per-question: {[f'{r:.2f}' for r in recalls]}"
         )
 
 
-class TestRAGASFaithfulness:
-    """RAGAS faithfulness: claims are grounded in source text."""
+class TestFaithfulness:
+    """Term-level faithfulness: claims are grounded in source text."""
 
     def test_claim_faithfulness(self, corpus_dir, tmp_path):
         """Claims should be traceable to source text units.
@@ -292,14 +284,14 @@ class TestRAGASFaithfulness:
 
         faith = _faithfulness(claim_texts, source_texts)
         assert faith > 0.70, (
-            f"RAGAS faithfulness = {faith:.3f} (below 0.70). "
+            f"Faithfulness = {faith:.3f} (below 0.70). "
             f"{int((1-faith) * len(claim_texts))} of {len(claim_texts)} claims "
             "contain terms not grounded in source text."
         )
 
 
-class TestRAGASAnswerRelevancy:
-    """RAGAS answer relevancy: context enables answering the question."""
+class TestAnswerRelevancy:
+    """Term coverage: context contains question terms."""
 
     def test_answer_relevancy(self, corpus_dir, tmp_path, ground_truth):
         """Retrieved context should contain enough to answer the question.
@@ -323,7 +315,7 @@ class TestRAGASAnswerRelevancy:
 
         mean_rel = mean(relevancies) if relevancies else 0.0
         assert mean_rel > 0.40, (
-            f"RAGAS answer relevancy = {mean_rel:.3f} (below 0.40). "
+            f"Answer relevancy = {mean_rel:.3f} (below 0.40). "
             f"Per-question: {[f'{r:.2f}' for r in relevancies]}"
         )
 
@@ -428,16 +420,16 @@ class TestLLMJudgedRelevancy:
         )
 
 
-class TestRAGASComposite:
-    """Composite RAGAS score combining all dimensions."""
+class TestComposite:
+    """Composite retrieval score combining all lexical dimensions."""
 
-    def test_composite_ragas_score(self, corpus_dir, tmp_path, ground_truth):
-        """Combined RAGAS score across all dimensions.
+    def test_composite_retrieval_score(self, corpus_dir, tmp_path, ground_truth):
+        """Combined lexical score across all dimensions.
 
         Composite = harmonic_mean(precision, recall, faithfulness, relevancy)
-        Threshold: > 0.35
+        Threshold: > 0.50
 
-        This is the headline number: a single metric for retrieval quality.
+        Note: These are lexical (keyword/term) metrics, not semantic.
         """
         archive_path = tmp_path / "ragas_composite.arc"
         result = build_archive(corpus_dir, archive_path)
@@ -484,7 +476,7 @@ class TestRAGASComposite:
             composite = 0.0
 
         assert composite > 0.50, (
-            f"Composite RAGAS = {composite:.3f} (below 0.35). "
+            f"Composite retrieval = {composite:.3f} (below 0.50). "
             f"Precision={mean_p:.2f}, Recall={mean_r:.2f}, "
             f"Faithfulness={faith:.2f}, Relevancy={mean_rel:.2f}"
         )
@@ -495,11 +487,10 @@ class TestEmbedderComparison:
 
     @pytest.mark.parametrize("force_tfidf", [True, False], ids=["tfidf", "sentence-transformers"])
     def test_composite_by_embedder(self, corpus_dir, tmp_path, ground_truth, force_tfidf):
-        """Composite RAGAS score parametrized by embedder.
+        """Composite lexical score parametrized by embedder.
 
         Runs the same evaluation with both TF-IDF and sentence-transformers
-        so we have comparable numbers. TF-IDF threshold is lower (0.50)
-        since it's the zero-dependency fallback.
+        so we have comparable numbers.
         """
         archive_path = tmp_path / "emb_cmp.arc"
         result = build_archive(corpus_dir, archive_path, force_tfidf=force_tfidf)

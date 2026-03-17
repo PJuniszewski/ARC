@@ -388,7 +388,7 @@ class TestSecurityMetricsSummary:
         traceability_rate = traceable / len(result.claims) if result.claims else 0
 
         # --- Print scorecard ---
-        print(f"\n=== Security Scorecard ===")
+        print("\n=== Security Scorecard ===")
         print(f"  Tamper detection:   {tamper_rate:.0%} ({tamper_detected}/{tamper_total})")
         print(f"  Rollback detection: {rollback_rate:.0%}")
         print(f"  Evidence traceable: {traceability_rate:.0%} ({traceable}/{len(result.claims)})")

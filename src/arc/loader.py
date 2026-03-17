@@ -10,12 +10,26 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-import numpy as np
 
 from .cas import ContentAddressedStore, VerificationResult
 from .embeddings import TfidfEmbedder, VectorStore, get_embedder
 from .manifest import read_manifest_from_cas, validate_manifest
-from .models import Claim, Decision, Manifest, TextUnit
+from .config import (
+    BFS_EXPANSION_MIN,
+    EXPANSION_MIN,
+    HEADING_BOOST_WEIGHT,
+    HEADING_MATCH_THRESHOLD,
+    KEYWORD_BOOST_WEIGHT,
+    KEYWORD_SEED_MIN_TOKENS,
+    MAX_BFS_RESULTS,
+    MAX_FILTERED_CLAIMS,
+    MIN_SCORE,
+    STOP_WORDS,
+    TOP_K_BASE,
+    TOP_K_FLOOR,
+    TOP_K_RATIO,
+)
+from .models import Claim, Decision, Manifest, PolicyRule, TextUnit, ToolDeclaration, WorkflowStep
 
 
 @dataclass
@@ -26,6 +40,9 @@ class LoadedArchive:
     source_units: list[TextUnit] = field(default_factory=list)
     claims: list[Claim] = field(default_factory=list)
     decisions: list[Decision] = field(default_factory=list)
+    tools: list[ToolDeclaration] = field(default_factory=list)
+    policies: list[PolicyRule] = field(default_factory=list)
+    workflow: list[WorkflowStep] = field(default_factory=list)
     vector_store: Optional[VectorStore] = None
     archive_path: str = ""
 
@@ -60,23 +77,25 @@ class LoadedArchive:
                 if all_texts:
                     _embedder.fit(all_texts)
             query_vec = _embedder.embed(query)
-            search_results = self.vector_store.search(query_vec, top_k=8)
+            _claim_ids = {c.id for c in self.claims}
+            _all_search = self.vector_store.search(query_vec, top_k=len(self.vector_store.ids))
+            search_results = [(cid, s, t) for cid, s, t in _all_search if cid in _claim_ids][:TOP_K_BASE]
             seed_ids = {r[0] for r in search_results}
             # Keyword seeding: add claims sharing 3+ stemmed tokens with query
             query_tokens = set(_embedder._tokenize(query))
             for claim in self.claims:
                 if claim.id not in seed_ids:
                     claim_tokens = set(_embedder._tokenize(claim.text))
-                    if len(query_tokens & claim_tokens) >= 3:
+                    if len(query_tokens & claim_tokens) >= KEYWORD_SEED_MIN_TOKENS:
                         seed_ids.add(claim.id)
 
             # Pre-compute hybrid scores for BFS gating (mirrors _filter_by_task)
-            raw_results = self.vector_store.search(query_vec, top_k=len(self.claims))
+            raw_results = [(cid, s, t) for cid, s, t in _all_search if cid in _claim_ids]
             for cid, vscore, text in raw_results:
                 claim_tokens = set(_embedder._tokenize(text))
                 overlap = len(query_tokens & claim_tokens)
                 kw_boost = overlap / len(query_tokens) if query_tokens else 0.0
-                score_by_id[cid] = vscore + 0.3 * kw_boost
+                score_by_id[cid] = vscore + KEYWORD_BOOST_WEIGHT * kw_boost
         else:
             # Fallback to text search
             seed_claims = self.flat_search(query, top_k=5)
@@ -93,7 +112,6 @@ class LoadedArchive:
         visited = set(seed_ids)
         frontier = set(seed_ids)
         _bfs_query_tokens = set(_embedder._tokenize(query)) if _embedder else set()
-        BFS_EXPANSION_MIN = 0.10
 
         for _ in range(hops):
             next_frontier: set[str] = set()
@@ -101,12 +119,18 @@ class LoadedArchive:
                 claim = claim_by_id.get(claim_id)
                 if not claim:
                     continue
-                # Hybrid gate: pass if tokens overlap OR vector score is high enough
+                # Hybrid gate: pass if tokens overlap OR vector score is high enough.
+                # If query tokens are empty (tokenizer failure), require vector relevance
+                # to prevent the gate from being wide open.
                 if _bfs_query_tokens:
                     claim_tokens = set(_embedder._tokenize(claim.text))
                     has_token_overlap = bool(_bfs_query_tokens & claim_tokens)
                     has_vector_relevance = score_by_id.get(claim_id, 0) >= BFS_EXPANSION_MIN
                     if not (has_token_overlap or has_vector_relevance):
+                        continue
+                elif score_by_id:
+                    # No query tokens available — fall back to vector score only
+                    if score_by_id.get(claim_id, 0) < BFS_EXPANSION_MIN:
                         continue
                 # Follow evidence pointers to find co-located claims
                 for ev in claim.evidence:
@@ -118,7 +142,6 @@ class LoadedArchive:
             frontier = next_frontier
 
         # Safety cap: limit BFS results by hybrid score
-        MAX_BFS_RESULTS = 30
         result_claims = [claim_by_id[cid] for cid in visited if cid in claim_by_id]
         if len(result_claims) > MAX_BFS_RESULTS and score_by_id:
             result_claims.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
@@ -204,7 +227,13 @@ def load(
             loaded.reason = f"Digest mismatch for layer '{layer.name}'"
             return loaded
 
-        data = json.loads(blob_data)
+        try:
+            data = json.loads(blob_data)
+        except json.JSONDecodeError as e:
+            logger.error("corrupt JSON in layer '%s': %s", layer.name, e)
+            loaded.rejected = True
+            loaded.reason = f"Corrupt JSON in layer '{layer.name}': {e}"
+            return loaded
 
         if layer.type == "semantic.source_units":
             loaded.source_units = [TextUnit.from_dict(d) for d in data]
@@ -214,14 +243,23 @@ def load(
             loaded.decisions = [Decision.from_dict(d) for d in data]
         elif layer.type == "index.embeddings":
             loaded.vector_store = VectorStore.from_dict(data)
+        elif layer.type == "operational.tools":
+            loaded.tools = [ToolDeclaration.from_dict(d) for d in data]
+        elif layer.type == "operational.policy":
+            loaded.policies = [PolicyRule.from_dict(d) for d in data]
+        elif layer.type == "operational.workflow":
+            loaded.workflow = [WorkflowStep.from_dict(d) for d in data]
 
     logger.info(
-        "loaded archive=%s layers=%d claims=%d source_units=%d decisions=%d",
+        "loaded archive=%s layers=%d claims=%d source_units=%d decisions=%d tools=%d policies=%d workflow=%d",
         loaded.manifest.archive_id,
         len(loaded.manifest.layers),
         len(loaded.claims),
         len(loaded.source_units),
         len(loaded.decisions),
+        len(loaded.tools),
+        len(loaded.policies),
+        len(loaded.workflow),
     )
 
     # Task-based filtering: use embeddings to select relevant claims
@@ -252,21 +290,19 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             embedder.fit(all_texts)
     query_vec = embedder.embed(task)
 
-    # Get vector similarity scores for all claims
-    raw_results = loaded.vector_store.search(query_vec, top_k=len(loaded.claims))
+    # Get vector similarity scores — search broadly to compensate for
+    # non-claim entries (tools, workflows) in the vector store, then
+    # filter to claim IDs only.
+    claim_ids = {c.id for c in loaded.claims}
+    search_k = len(loaded.vector_store.ids)  # search all, filter after
+    all_results = loaded.vector_store.search(query_vec, top_k=search_k)
+    raw_results = [(cid, s, t) for cid, s, t in all_results if cid in claim_ids]
 
     # Compute keyword overlap boost using stemmed tokens
     query_tokens = set(embedder._tokenize(task))
 
     # Content query tokens (stop words removed) for heading matching
-    _STOP_WORDS = {
-        'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for',
-        'of', 'and', 'or', 'an', 'be', 'by', 'it', 'do', 'no', 'not',
-        'what', 'how', 'which', 'who', 'when', 'where', 'why', 'that',
-        'this', 'with', 'from', 'has', 'have', 'does', 'did', 'will',
-        'can', 'should', 'would', 'could', 'may', 'use', 'used',
-    }
-    content_query_tokens = query_tokens - _STOP_WORDS
+    content_query_tokens = query_tokens - STOP_WORDS
 
     scored: list[tuple[str, float, str]] = []
     for cid, vscore, text in raw_results:
@@ -280,21 +316,20 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
         heading_boost = 0.0
         if ": " in text:
             heading = text[:text.index(": ")]
-            heading_tokens = set(embedder._tokenize(heading)) - _STOP_WORDS
+            heading_tokens = set(embedder._tokenize(heading)) - STOP_WORDS
             if heading_tokens:
                 heading_match = len(heading_tokens & content_query_tokens) / len(heading_tokens)
-                if heading_match >= 0.5:
-                    heading_boost = 0.2 * heading_match
+                if heading_match >= HEADING_MATCH_THRESHOLD:
+                    heading_boost = HEADING_BOOST_WEIGHT * heading_match
 
-        hybrid = vscore + 0.3 * kw_boost + heading_boost
+        hybrid = vscore + KEYWORD_BOOST_WEIGHT * kw_boost + heading_boost
         scored.append((cid, hybrid, text))
 
     # Sort by hybrid score descending
     scored.sort(key=lambda x: x[1], reverse=True)
 
     # Take top-k with minimum score threshold
-    MIN_SCORE = 0.15
-    TOP_K = min(8, max(3, len(loaded.claims) // 10))
+    TOP_K = min(TOP_K_BASE, max(TOP_K_FLOOR, int(len(loaded.claims) * TOP_K_RATIO)))
     results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= MIN_SCORE]
     if not results and scored:
         results = scored[:3]
@@ -304,7 +339,6 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     # Score lookup for expansion gating — every claim already has a
     # hybrid score from the vector+keyword pass above.
     score_by_id = {cid: s for cid, s, _ in scored}
-    EXPANSION_MIN = 0.10  # softer than primary MIN_SCORE
 
     claim_by_id = {c.id: c for c in loaded.claims}
     selected = []
@@ -334,18 +368,11 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
 
     # Source-level matching: find source units matching the query, then
     # include derived claims that scored above EXPANSION_MIN.
-    _STOP_WORDS = {
-        'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for',
-        'of', 'and', 'or', 'an', 'be', 'by', 'it', 'do', 'no', 'not',
-        'what', 'how', 'which', 'who', 'when', 'where', 'why', 'that',
-        'this', 'with', 'from', 'has', 'have', 'does', 'did', 'will',
-        'can', 'should', 'would', 'could', 'may', 'use', 'used',
-    }
-    content_query_tokens = query_tokens - _STOP_WORDS
+    content_query_tokens = query_tokens - STOP_WORDS
     if loaded.source_units and content_query_tokens:
         for tu in loaded.source_units:
             tu_tokens = set(embedder._tokenize(tu.content))
-            if len(content_query_tokens & tu_tokens) >= 3:
+            if len(content_query_tokens & tu_tokens) >= KEYWORD_SEED_MIN_TOKENS:
                 for claim in loaded.claims:
                     if (claim.derived_from == tu.id
                             and claim.id not in seen
@@ -362,7 +389,7 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             seen.add(claim.id)
 
     # Hard cap: if expansion added too many claims, keep the highest-scored
-    MAX_TOTAL = 12
+    MAX_TOTAL = MAX_FILTERED_CLAIMS
     pre_cap = len(selected)
     if len(selected) > MAX_TOTAL:
         selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
@@ -385,10 +412,12 @@ def restore_sources(
     archive_path: str | Path,
     output_dir: str | Path,
 ) -> dict:
-    """Restore original source files from archive.
+    """Restore source files from archive (lossy reconstruction).
 
-    Reads the source-units layer, retrieves content blobs, and writes
-    files to output_dir preserving relative paths from resource locators.
+    Reads the source-units layer and reconstructs files by joining text
+    units with double newlines. This is NOT lossless: original whitespace,
+    line endings, and inter-section formatting are not preserved. The
+    semantic content is intact but the byte-level original is lost.
 
     Returns:
         {restored_files: list[str], total_bytes: int}
@@ -464,10 +493,33 @@ def restore_sources(
 
 
 def _version_lt(a: str, b: str) -> bool:
-    """Simple semantic version comparison (a < b)."""
+    """Semantic version comparison (a < b).
+
+    Handles pre-release suffixes like "1.0.0-rc1" by stripping them
+    and comparing numeric parts only. Pre-release is considered less
+    than the release (e.g. "1.0.0-rc1" < "1.0.0").
+    """
+    import re
+
+    def _parse(v: str) -> tuple[tuple[int, ...], str]:
+        # Split "1.0.0-rc1" into ("1.0.0", "rc1")
+        match = re.match(r'^([\d.]+)(.*)', v)
+        if not match:
+            return ((), v)
+        numeric = tuple(int(x) for x in match.group(1).split(".") if x)
+        suffix = match.group(2).lstrip("-").lstrip("+")
+        return (numeric, suffix)
+
     try:
-        va = tuple(int(x) for x in a.split("."))
-        vb = tuple(int(x) for x in b.split("."))
-        return va < vb
+        va_num, va_suffix = _parse(a)
+        vb_num, vb_suffix = _parse(b)
+        if va_num != vb_num:
+            return va_num < vb_num
+        # Same numeric part: pre-release (non-empty suffix) < release (empty suffix)
+        if va_suffix and not vb_suffix:
+            return True
+        if not va_suffix and vb_suffix:
+            return False
+        return va_suffix < vb_suffix
     except (ValueError, AttributeError):
-        return a < b
+        return str(a) < str(b)

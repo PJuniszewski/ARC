@@ -11,7 +11,7 @@ It is intentionally short, practical, and updated often.
 **Purpose:** portable semantic archive format for AI agent context
 **Current stage:** working implementation with 181 tests, evaluation harness, production quality gate
 **Primary environment:** Claude Code
-**Test status:** 181 pass, 3 skip (LLM-dependent without API key)
+**Test status:** 211 pass, 3 skip (LLM-dependent without API key)
 
 ---
 
@@ -34,7 +34,7 @@ ARC proposes a better model:
 - `manifest.json` — root entry point with `root_digest` integrity seal
 - `blobs/sha256/<digest>` — content-addressed blob storage
 - `refs/provenance.json` — build provenance
-- 4 layers: source-units, claims, decisions, embeddings
+- 7 layers: source-units, claims, decisions, embeddings + 3 optional operational (tools, policy, workflow)
 
 ### Builder (8-stage pipeline)
 - Ingest → Normalize → Chunk → Extract → Deduplicate → Index → Assemble → Validate
@@ -55,6 +55,11 @@ ARC proposes a better model:
 - **Claim**: atomic assertion with kind (fact/requirement/definition/assertion), evidence pointers, confidence, status
 - **Decision**: ADR-style structured record (title, context, options, consequences)
 - **EvidencePointer**: link from claim/decision to source unit
+
+### Operational model (ADR-0005)
+- **ToolDeclaration**: agent capability with name, parameters, constraints, status (active/deprecated/experimental)
+- **PolicyRule**: constraint with scope, effect (allow/deny/require_approval), priority
+- **WorkflowStep**: agent, task, or config step with dependencies, tool refs, agent refs
 
 ### Evaluation
 - RAGAS metrics: context precision, recall (1-hop + multi-hop), faithfulness, answer relevancy, composite
@@ -81,8 +86,7 @@ ARC proposes a better model:
 - Single-file packaging (currently directory only)
 - CLI beyond basic build/load/verify (`src/arc/cli.py` exists but minimal)
 - Incremental archive updates (parent_archive plumbing exists but untested at scale)
-- Policy-aware execution layers
-- Sandboxed executable layers (explicitly deferred from v0)
+- Sandboxed executable layers (explicitly deferred from v0; operational layers are declarative-only)
 
 ---
 
@@ -124,7 +128,7 @@ ARC proposes a better model:
 Define trust model — threat model documented, CAS integrity implemented, **signatures/attestations not yet implemented**
 
 ### Priority 4 (done)
-~~Define evaluation harness~~ — 181 tests, RAGAS + security + behavioral eval
+~~Define evaluation harness~~ — 211 tests, RAGAS + security + behavioral eval + operational extraction
 
 ### Priority 5 (next)
 Signatures and attestations — implement the trust chain from `docs/provenance-signing.md`
@@ -144,6 +148,7 @@ These are directionally accepted:
 - `MEMORY.md` and `INDEX.md` stay separate (ADR-0003)
 - ARC is artifact-first, not chatbot-memory-first (ADR-0002)
 - No lossy compression in builder (ADR-0004)
+- Operational layers are optional, declarative, not executable in v0 (ADR-0005)
 - verification is a feature, not a nice-to-have
 - diffability matters as much as storage
 - builder and loader are separable components

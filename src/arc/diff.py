@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from .cas import ContentAddressedStore
 from .loader import load
-from .manifest import read_manifest_from_cas
-from .models import Claim, Decision
+from .models import Claim, Decision, PolicyRule, ToolDeclaration, WorkflowStep
 
 
 @dataclass
@@ -27,6 +24,14 @@ class DiffResult:
     removed_claims: list[Claim] = field(default_factory=list)
     new_decisions: list[Decision] = field(default_factory=list)
     removed_decisions: list[Decision] = field(default_factory=list)
+
+    # Operational
+    new_tools: list[ToolDeclaration] = field(default_factory=list)
+    removed_tools: list[ToolDeclaration] = field(default_factory=list)
+    new_policies: list[PolicyRule] = field(default_factory=list)
+    removed_policies: list[PolicyRule] = field(default_factory=list)
+    new_workflow: list[WorkflowStep] = field(default_factory=list)
+    removed_workflow: list[WorkflowStep] = field(default_factory=list)
 
     # Resources
     changed_resources: list[str] = field(default_factory=list)
@@ -48,6 +53,14 @@ class DiffResult:
                 "new_decisions": len(self.new_decisions),
                 "removed_decisions": len(self.removed_decisions),
             },
+            "operational": {
+                "new_tools": len(self.new_tools),
+                "removed_tools": len(self.removed_tools),
+                "new_policies": len(self.new_policies),
+                "removed_policies": len(self.removed_policies),
+                "new_workflow": len(self.new_workflow),
+                "removed_workflow": len(self.removed_workflow),
+            },
             "changed_resources": self.changed_resources,
         }
 
@@ -58,6 +71,9 @@ class DiffResult:
             f" (reuse: {self.blob_reuse_ratio:.1%})",
             f"Claims: +{len(self.new_claims)} -{len(self.removed_claims)}",
             f"Decisions: +{len(self.new_decisions)} -{len(self.removed_decisions)}",
+            f"Tools: +{len(self.new_tools)} -{len(self.removed_tools)}",
+            f"Policies: +{len(self.new_policies)} -{len(self.removed_policies)}",
+            f"Workflow: +{len(self.new_workflow)} -{len(self.removed_workflow)}",
         ]
         if self.changed_resources:
             lines.append(f"Changed resources: {', '.join(self.changed_resources)}")
@@ -104,9 +120,23 @@ def diff_archives(
         result.new_decisions = [d for d in loaded_b.decisions if d.title not in decisions_a_titles]
         result.removed_decisions = [d for d in loaded_a.decisions if d.title not in decisions_b_titles]
 
-        # Resource diff (by locator in source units)
-        resources_a = {tu.resource_id for tu in loaded_a.source_units}
-        resources_b = {tu.resource_id for tu in loaded_b.source_units}
+        # Tools diff by name
+        tools_a_names = {t.name for t in loaded_a.tools}
+        tools_b_names = {t.name for t in loaded_b.tools}
+        result.new_tools = [t for t in loaded_b.tools if t.name not in tools_a_names]
+        result.removed_tools = [t for t in loaded_a.tools if t.name not in tools_b_names]
+
+        # Policies diff by description
+        policies_a_descs = {p.description for p in loaded_a.policies}
+        policies_b_descs = {p.description for p in loaded_b.policies}
+        result.new_policies = [p for p in loaded_b.policies if p.description not in policies_a_descs]
+        result.removed_policies = [p for p in loaded_a.policies if p.description not in policies_b_descs]
+
+        # Workflow diff by name
+        workflow_a_names = {w.name for w in loaded_a.workflow}
+        workflow_b_names = {w.name for w in loaded_b.workflow}
+        result.new_workflow = [w for w in loaded_b.workflow if w.name not in workflow_a_names]
+        result.removed_workflow = [w for w in loaded_a.workflow if w.name not in workflow_b_names]
 
         # Find changed resources by comparing text unit content digests
         digest_by_resource_a: dict[str, set[str]] = {}

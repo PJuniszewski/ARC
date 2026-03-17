@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .models import Claim, TextUnit
+from .models import Claim
 
 
 @dataclass

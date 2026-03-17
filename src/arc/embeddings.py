@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
 from collections import Counter
@@ -288,8 +287,9 @@ def try_load_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
             return None
         _st_cache[model_name] = embedder
         return embedder
-    except Exception:
-        # ImportError, network errors, model download failures, etc.
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to load sentence-transformer %r: %s", model_name, e)
         _st_cache[model_name] = None
         return None
 

@@ -1,12 +1,14 @@
-"""BERTScore-based fidelity tests.
+"""Fidelity metrics — claim preservation and factual consistency.
 
-Closes the gap between TF-IDF proxy metrics and real semantic similarity.
-Uses bert-score when available (ml extras), otherwise falls back to
-sentence-level n-gram overlap (BLEU-like) as a tighter proxy than TF-IDF cosine.
+Two tiers:
+- BERTScore (real semantic similarity) — requires `pip install arc-archive[ml]`,
+  marked @pytest.mark.ml, excluded from default CI. Only runs when bert-score is
+  installed. This is the only test that uses actual BERTScore.
+- N-gram overlap and term-level entailment — lexical proxies that run without
+  ML dependencies. These are NOT BERTScore; they are BLEU-like n-gram precision
+  and keyword grounding checks.
 
-Methodology references:
-- BERTScore: https://arxiv.org/abs/1904.09675
-- Factual consistency via NLI-style entailment checks
+The n-gram fallback tests always run. The BERTScore test only runs with ml extras.
 """
 
 from __future__ import annotations

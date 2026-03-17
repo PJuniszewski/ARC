@@ -1,4 +1,4 @@
-"""Shared LLM evaluation module — Anthropic Claude as RAGAS judge.
+"""Shared LLM evaluation module — Anthropic Claude as semantic judge.
 
 Provides LLM-based scoring for answer relevancy and context precision,
 falling back gracefully when the anthropic SDK or API key is unavailable.

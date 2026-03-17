@@ -8,6 +8,49 @@ This repo is set up for work inside Claude Code.
 
 ---
 
+## Current status: 0.1.0-alpha
+
+ARC is in early alpha. The architecture and core pipeline work, but not everything advertised below is fully implemented yet.
+
+| Feature | Status |
+|---------|--------|
+| Content-addressed storage | Implemented, verified |
+| Manifest-driven layers | Implemented |
+| Selective loading (vector + keyword) | Implemented — lexical metrics only, not semantically evaluated |
+| Claim deduplication | Implemented (normalized text matching, not semantic dedup) |
+| Provenance metadata | Recorded at build time, not cryptographically enforced |
+| Signatures & attestations | Data model only — no cryptographic implementation yet |
+| Operational layers (tools, policies, workflows) | Stored declaratively — not enforced at load time |
+| Incremental builds | `parent_archive` parameter accepted but not used — no blob reuse |
+| Source restoration | Lossy — reconstructed from text units, original formatting lost |
+| Single-file packaging | Not implemented |
+
+See [CHANGELOG.md](CHANGELOG.md) for details.
+
+### Evaluation
+
+ARC uses real [RAGAS](https://docs.ragas.io/) evaluation with Claude as the LLM judge (`pip install arc-archive[eval]`). This measures semantic retrieval quality — not just keyword matching.
+
+The CI pipeline runs zero-dependency lexical smoke tests. RAGAS evaluation runs locally with an API key:
+
+```bash
+# Lexical smoke tests (CI)
+pytest tests/ -m "not ml and not llm and not eval"
+
+# Full RAGAS evaluation (requires ANTHROPIC_API_KEY)
+pip install arc-archive[eval]
+pytest tests/test_ragas_eval.py -v
+```
+
+### Known limitations
+
+- **Corpus is small.** Primary evaluation runs against 9 markdown files about ARC. External corpus tests use tiny fixtures (3 files each). No large-scale or real-project evaluation exists yet.
+- **Injection detection is basic.** 5 hardcoded regex patterns with a minimum 0.3 confidence floor. Contested claims are still included in archives.
+- **Source restoration is lossy.** Reconstructed from text units joined with `\n\n`. Original whitespace and formatting are not preserved.
+- **English only.** Stop words, stemming, and claim extraction patterns assume English text.
+
+---
+
 ## Why this exists
 
 Current agent stacks usually do one of these:
@@ -78,9 +121,10 @@ It is **not** just a zip file with markdown.
 - content-addressed storage
 - manifest-driven composition
 - semantic claims + decisions + policies + indexes
+- claim deduplication and contested claim exclusion
 - incremental updates and diffs
-- signatures, attestations, rollback protection
-- sandboxed executable policy/tool layers
+- signatures, attestations, rollback protection *(planned — not yet implemented)*
+- declarative tool/policy layers *(stored, not enforced at runtime)*
 
 ### Research goals
 

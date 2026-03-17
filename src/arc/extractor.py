@@ -1,11 +1,24 @@
-"""Claim and Decision extraction from text — rule-based with NLP fallback."""
+"""Claim, Decision, and Operational extraction from text and config files."""
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Optional
 
-from .models import Claim, Decision, EvidencePointer, TextUnit, _generate_id
+import yaml
+
+from .models import (
+    Claim,
+    Decision,
+    EvidencePointer,
+    PolicyRule,
+    Resource,
+    TextUnit,
+    ToolDeclaration,
+    WorkflowStep,
+    _generate_id,
+)
 
 # Patterns that indicate assertions / claims
 CLAIM_PATTERNS = [
@@ -224,3 +237,248 @@ def _split_sentences(text: str) -> list[str]:
         parts = re.split(r'\n\s*\n', s)
         result.extend(parts)
     return [s.strip() for s in result if s.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Operational extraction: tools, policies, workflow
+# ---------------------------------------------------------------------------
+
+
+def _parse_yaml_file(resource: Resource, source_dir: Path) -> Optional[dict]:
+    """Safely load YAML from a resource. Returns None for non-YAML or parse errors."""
+    if resource.metadata.get("extension") not in (".yaml", ".yml"):
+        return None
+    fpath = source_dir / resource.locator
+    if not fpath.exists():
+        return None
+    try:
+        data = yaml.safe_load(fpath.read_text(encoding="utf-8", errors="replace"))
+        if isinstance(data, dict):
+            return data
+    except (yaml.YAMLError, OSError):
+        pass
+    return None
+
+
+def extract_tools(
+    text_units: list[TextUnit],
+    resources: list[Resource],
+    source_dir: str | Path,
+) -> list[ToolDeclaration]:
+    """Extract tool declarations from YAML configs and markdown."""
+    source_dir = Path(source_dir)
+    tools: list[ToolDeclaration] = []
+    seen_names: set[str] = set()
+
+    # Primary: parse YAML files for tool references
+    for resource in resources:
+        data = _parse_yaml_file(resource, source_dir)
+        if data is None:
+            continue
+
+        # CrewAI-style: top-level agent defs with tools lists
+        for key, value in data.items():
+            if isinstance(value, dict) and "tools" in value:
+                tool_list = value["tools"]
+                if isinstance(tool_list, list):
+                    for tool_name in tool_list:
+                        if isinstance(tool_name, str) and tool_name not in seen_names:
+                            seen_names.add(tool_name)
+                            tools.append(ToolDeclaration(
+                                name=tool_name,
+                                description=f"Tool used by {key}",
+                                source_ref=resource.id,
+                            ))
+
+        # Top-level "tools:" key with list of dicts
+        if "tools" in data and isinstance(data["tools"], list):
+            for entry in data["tools"]:
+                if isinstance(entry, str):
+                    if entry not in seen_names:
+                        seen_names.add(entry)
+                        tools.append(ToolDeclaration(
+                            name=entry,
+                            source_ref=resource.id,
+                        ))
+                elif isinstance(entry, dict) and "name" in entry:
+                    name = entry["name"]
+                    if name not in seen_names:
+                        seen_names.add(name)
+                        tools.append(ToolDeclaration(
+                            name=name,
+                            description=entry.get("description", ""),
+                            parameters=entry.get("parameters", []),
+                            returns=entry.get("returns", ""),
+                            source_ref=resource.id,
+                        ))
+
+    # Markdown fallback: match "- **tool_name**: description" within ## Tools sections
+    tools_section_pattern = re.compile(
+        r"^##\s+Tools?\s*\n(.*?)(?=^##|\Z)", re.MULTILINE | re.DOTALL
+    )
+    tool_md_pattern = re.compile(r"^\s*[-*]\s+\*\*(\w+)\*\*\s*[-—:]\s*(.+)$", re.MULTILINE)
+    for tu in text_units:
+        for section_match in tools_section_pattern.finditer(tu.content):
+            section_text = section_match.group(1)
+            for m in tool_md_pattern.finditer(section_text):
+                name = m.group(1)
+                if name not in seen_names:
+                    seen_names.add(name)
+                    tools.append(ToolDeclaration(
+                        name=name,
+                        description=m.group(2).strip(),
+                        source_ref=tu.resource_id,
+                    ))
+
+    return tools
+
+
+def extract_policies(
+    text_units: list[TextUnit],
+    resources: list[Resource],
+    source_dir: str | Path,
+) -> list[PolicyRule]:
+    """Extract policy rules from YAML configs and markdown conventions."""
+    source_dir = Path(source_dir)
+    policies: list[PolicyRule] = []
+    seen: set[str] = set()
+
+    # Primary: parse YAML for permissions/policy/constraints keys
+    for resource in resources:
+        data = _parse_yaml_file(resource, source_dir)
+        if data is None:
+            continue
+
+        for key in ("permissions", "policy", "constraints"):
+            if key in data and isinstance(data[key], list):
+                for entry in data[key]:
+                    if isinstance(entry, str) and entry not in seen:
+                        seen.add(entry)
+                        policies.append(PolicyRule(
+                            scope="*",
+                            effect="deny",
+                            description=entry,
+                            source_ref=resource.id,
+                        ))
+                    elif isinstance(entry, dict):
+                        desc = entry.get("description", entry.get("rule", ""))
+                        if desc and desc not in seen:
+                            seen.add(desc)
+                            policies.append(PolicyRule(
+                                scope=entry.get("scope", "*"),
+                                effect=entry.get("effect", "deny"),
+                                description=desc,
+                                priority=entry.get("priority", 0),
+                                source_ref=resource.id,
+                            ))
+
+    # Markdown: extract rules from "## Conventions" or "## Security" sections
+    convention_pattern = re.compile(
+        r"^##\s+(?:Conventions|Security|Constraints|Rules|Permissions)\s*\n(.*?)(?=^##|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    for tu in text_units:
+        for section_match in convention_pattern.finditer(tu.content):
+            section_text = section_match.group(1)
+            for line in section_text.split("\n"):
+                line = line.strip()
+                rule_match = re.match(r"^[-*]\s+(.{15,})$", line)
+                if rule_match:
+                    rule_text = rule_match.group(1).strip()
+                    if rule_text not in seen:
+                        seen.add(rule_text)
+                        # Determine effect from keywords
+                        effect = "deny"
+                        lower = rule_text.lower()
+                        if any(w in lower for w in ["must", "require", "should", "always"]):
+                            effect = "require_approval"
+                        if any(w in lower for w in ["never", "do not", "don't", "forbidden"]):
+                            effect = "deny"
+                        if any(w in lower for w in ["may", "can", "allowed", "permit"]):
+                            effect = "allow"
+                        policies.append(PolicyRule(
+                            scope="*",
+                            effect=effect,
+                            description=rule_text,
+                            source_ref=tu.resource_id,
+                        ))
+
+    return policies
+
+
+def extract_workflow(
+    text_units: list[TextUnit],
+    resources: list[Resource],
+    source_dir: str | Path,
+) -> list[WorkflowStep]:
+    """Extract workflow steps from YAML agent/task definitions."""
+    source_dir = Path(source_dir)
+    steps: list[WorkflowStep] = []
+    seen_names: set[str] = set()
+
+    for resource in resources:
+        data = _parse_yaml_file(resource, source_dir)
+        if data is None:
+            continue
+
+        for key, value in data.items():
+            if not isinstance(value, dict):
+                continue
+
+            # Agent definitions: have role + goal
+            if "role" in value and "goal" in value:
+                if key not in seen_names:
+                    seen_names.add(key)
+                    tools = value.get("tools", [])
+                    if not isinstance(tools, list):
+                        tools = []
+                    config = {}
+                    if "max_iterations" in value:
+                        config["max_iterations"] = value["max_iterations"]
+                    if "verbose" in value:
+                        config["verbose"] = value["verbose"]
+                    steps.append(WorkflowStep(
+                        name=key,
+                        kind="agent",
+                        description=f"{value['role']}: {value['goal']}",
+                        tools=[str(t) for t in tools],
+                        config=config,
+                        source_ref=resource.id,
+                    ))
+
+            # Task definitions: have description + agent
+            elif "description" in value and "agent" in value:
+                if key not in seen_names:
+                    seen_names.add(key)
+                    deps = value.get("depends_on", [])
+                    if not isinstance(deps, list):
+                        deps = []
+                    steps.append(WorkflowStep(
+                        name=key,
+                        kind="task",
+                        description=str(value["description"]).strip(),
+                        agent_ref=str(value["agent"]),
+                        depends_on=[str(d) for d in deps],
+                        expected_output=str(value.get("expected_output", "")).strip(),
+                        source_ref=resource.id,
+                    ))
+
+    # Config files: YAML with model/edit-format style keys
+    for resource in resources:
+        data = _parse_yaml_file(resource, source_dir)
+        if data is None:
+            continue
+        if "model" in data or "edit-format" in data:
+            name = Path(resource.locator).stem.lstrip(".")
+            if name not in seen_names:
+                seen_names.add(name)
+                config = {k: v for k, v in data.items() if not isinstance(v, (dict, list))}
+                steps.append(WorkflowStep(
+                    name=name,
+                    kind="config",
+                    description=f"Configuration from {resource.locator}",
+                    config=config,
+                    source_ref=resource.id,
+                ))
+
+    return steps

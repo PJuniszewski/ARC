@@ -34,6 +34,17 @@ Use for:
 - file discovery
 - finding the right source of truth quickly
 
+### `CHANGELOG.md`
+Use for:
+- release history
+- user-visible changes per version
+
+### `LICENSE`
+Apache-2.0 license.
+
+### `CONTRIBUTING.md`
+Contribution rules (mirrors `docs/contributing.md`).
+
 ---
 
 ## Core docs
@@ -141,6 +152,9 @@ Defines why `MEMORY.md` and `INDEX.md` are separate.
 ### `docs/adr/ADR-0004-no-lossy-compression.md`
 Defines why the builder preserves full fidelity (no lossy compression). Selective loading is the loader's job.
 
+### `docs/adr/ADR-0005-operational-layers.md`
+Defines scope expansion: 3 optional operational layer types (tools, policy, workflow) for packaging agent capabilities alongside knowledge.
+
 Use ADRs when something is accepted and should stop being debated casually.
 
 ---
@@ -247,9 +261,10 @@ Dual embedder: sentence-transformers (all-MiniLM-L6-v2) with TF-IDF fallback. Ve
 
 ### `src/arc/extractor.py`
 Rule-based claim/decision extraction with section heading enrichment and injection detection.
+Operational extraction: tools, policies, workflows from YAML/JSON agent configs.
 
 ### `src/arc/models.py`
-Data models: Resource, TextUnit, Claim, Decision, EvidencePointer, Layer, Manifest.
+Data models: Resource, TextUnit, Claim, Decision, EvidencePointer, ToolDeclaration, PolicyRule, WorkflowStep, Layer, Manifest.
 
 ### `src/arc/cas.py`
 Content-addressed storage: SHA-256 blob store with Merkle verification.
@@ -257,24 +272,48 @@ Content-addressed storage: SHA-256 blob store with Merkle verification.
 ### `src/arc/compressor.py`
 Claim deduplication and contested claim exclusion.
 
+### `src/arc/config.py`
+Named constants: stop words, builder defaults, loader thresholds.
+
+### `src/arc/diff.py`
+Structural and semantic diff between two archives.
+
+### `src/arc/cli.py`
+CLI entry point: `arc build`, `arc inspect`, `arc verify`, `arc diff`, `arc restore`.
+
+### `src/arc/py.typed`
+PEP 561 marker — indicates the package ships inline type annotations.
+
+---
+
+## CI / GitHub
+
+### `.github/workflows/test.yml`
+GitHub Actions CI: Python 3.10-3.13 matrix, ruff lint, pytest (non-ML/LLM).
+
 ---
 
 ## Test suite (evaluation)
 
-### `tests/test_bertscore_fidelity.py`
-BERTScore-based fidelity (ML extras), n-gram overlap fallback,
+### `tests/test_fidelity_metrics.py`
+Fidelity metrics: real BERTScore (ML extras, excluded from CI), n-gram overlap fallback,
 factual entailment, contradiction detection, selective loading efficiency.
 
-### `tests/test_ragas_retrieval.py`
-RAGAS-style evaluation: context precision, context recall (1-hop + multi-hop),
-faithfulness, answer relevancy, composite harmonic-mean, embedder comparison.
+### `tests/test_ragas_eval.py`
+**Primary evaluation.** Real RAGAS metrics using Claude as LLM judge.
+Context precision, recall, faithfulness, response relevancy — all semantically evaluated.
+Requires `pip install arc-archive[eval]` + `ANTHROPIC_API_KEY`.
 
-### `tests/test_external_ragas.py`
-RAGAS evaluation over external corpora (aider, crewai). Parametrized by embedder.
-Proves generalization beyond internal corpus.
+### `tests/test_retrieval_metrics.py`
+CI smoke tests: keyword-based context precision, recall, faithfulness, term coverage.
+Zero-dependency lexical proxies that run without an LLM. Not a substitute for RAGAS.
+
+### `tests/test_external_retrieval.py`
+Lexical retrieval metrics over external corpora (aider, crewai). Parametrized by embedder.
+Small fixture dirs (~3 files each) — basic generalization check, not comprehensive.
 
 ### `tests/test_comprehensive_scorecard.py`
-Unified scorecard: all RAGAS + security metrics in one report. Dual LLM/term-matching
+Unified scorecard: all retrieval + security metrics in one report. Dual LLM/term-matching
 reporting. Production quality gate for sentence-transformers.
 
 ### `tests/test_agent_eval.py`
@@ -289,6 +328,10 @@ incremental update, multi-session continuity.
 ### `tests/test_security_evaluation.py`
 Exhaustive tamper detection rate, manifest tamper, rollback detection,
 poisoned-source containment, prompt injection tracing, security scorecard.
+
+### `tests/test_operational_extraction.py`
+Operational extraction: tools, policies, workflows from crewai/aider fixtures.
+Builder, loader, diff integration for operational layers.
 
 ### `tests/test_roundtrip.py`
 Archive roundtrip: build → verify → load → restore sources → diff.

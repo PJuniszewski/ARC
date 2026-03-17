@@ -6,3 +6,12 @@ dist/
 build/
 *.egg
 .pytest_cache/
+.venv/
+.mypy_cache/
+.DS_Store
+results/
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

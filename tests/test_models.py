@@ -10,8 +10,11 @@ from arc.models import (
     EvidencePointer,
     Layer,
     Manifest,
+    PolicyRule,
     Resource,
     TextUnit,
+    ToolDeclaration,
+    WorkflowStep,
 )
 
 
@@ -110,6 +113,110 @@ class TestDecision:
         assert restored.title == "Use SHA-256"
         assert len(restored.options) == 3
         assert restored.decision == "SHA-256"
+
+
+class TestToolDeclaration:
+    def test_valid_statuses(self):
+        for status in ["active", "deprecated", "experimental"]:
+            t = ToolDeclaration(name="test", status=status)
+            assert t.status == status
+
+    def test_invalid_status(self):
+        with pytest.raises(ValueError, match="Invalid tool status"):
+            ToolDeclaration(name="test", status="invalid")
+
+    def test_round_trip(self):
+        t = ToolDeclaration(
+            name="web_search",
+            description="Search the web",
+            parameters=[{"name": "query", "type": "string", "required": True}],
+            returns="list of results",
+            constraints=["read-only"],
+            source_ref="r1",
+            status="active",
+        )
+        d = t.to_dict()
+        restored = ToolDeclaration.from_dict(d)
+        assert restored.name == "web_search"
+        assert restored.description == "Search the web"
+        assert len(restored.parameters) == 1
+        assert restored.constraints == ["read-only"]
+
+    def test_deterministic_id(self):
+        t1 = ToolDeclaration(name="web_search")
+        t2 = ToolDeclaration(name="web_search")
+        assert t1.id == t2.id
+
+    def test_different_names_different_ids(self):
+        t1 = ToolDeclaration(name="web_search")
+        t2 = ToolDeclaration(name="text_editor")
+        assert t1.id != t2.id
+
+
+class TestPolicyRule:
+    def test_valid_effects(self):
+        for effect in ["allow", "deny", "require_approval"]:
+            p = PolicyRule(effect=effect)
+            assert p.effect == effect
+
+    def test_invalid_effect(self):
+        with pytest.raises(ValueError, match="Invalid policy effect"):
+            PolicyRule(effect="invalid")
+
+    def test_round_trip(self):
+        p = PolicyRule(
+            scope="tool:web_search",
+            effect="deny",
+            conditions=["after-hours"],
+            priority=10,
+            description="Block web search after hours",
+            source_ref="r1",
+        )
+        d = p.to_dict()
+        restored = PolicyRule.from_dict(d)
+        assert restored.scope == "tool:web_search"
+        assert restored.effect == "deny"
+        assert restored.priority == 10
+        assert restored.conditions == ["after-hours"]
+
+    def test_deterministic_id(self):
+        p1 = PolicyRule(scope="*", description="no secrets")
+        p2 = PolicyRule(scope="*", description="no secrets")
+        assert p1.id == p2.id
+
+
+class TestWorkflowStep:
+    def test_round_trip(self):
+        w = WorkflowStep(
+            name="research_task",
+            kind="task",
+            description="Research the topic",
+            agent_ref="researcher",
+            depends_on=["init"],
+            tools=["web_search"],
+            config={"timeout": 300},
+            expected_output="Research brief",
+            source_ref="r1",
+        )
+        d = w.to_dict()
+        restored = WorkflowStep.from_dict(d)
+        assert restored.name == "research_task"
+        assert restored.kind == "task"
+        assert restored.agent_ref == "researcher"
+        assert restored.depends_on == ["init"]
+        assert restored.tools == ["web_search"]
+        assert restored.config == {"timeout": 300}
+
+    def test_deterministic_id(self):
+        w1 = WorkflowStep(name="step1")
+        w2 = WorkflowStep(name="step1")
+        assert w1.id == w2.id
+
+    def test_agent_kind(self):
+        w = WorkflowStep(name="researcher", kind="agent", description="Senior Research Analyst")
+        assert w.kind == "agent"
+        d = w.to_dict()
+        assert d["kind"] == "agent"
 
 
 class TestLayer:
