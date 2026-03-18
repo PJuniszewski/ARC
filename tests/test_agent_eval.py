@@ -614,7 +614,7 @@ class TestGenerateEvaluationReport:
         report = {
             "metadata": {
                 "date": "2026-03-16",
-                "arc_version": "0.1.0",
+                "arc_version": "1.0.0",
                 "agents_evaluated": list(scorecards.keys()),
                 "total_tasks": len(all_results),
             },

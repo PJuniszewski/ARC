@@ -54,7 +54,7 @@ def build_archive(
     source_dir: str | Path,
     output_dir: str | Path,
     archive_id: Optional[str] = None,
-    archive_version: str = "0.1.0",
+    archive_version: str = "1.0.0",
     parent_archive: Optional[str | Path] = None,
     force_tfidf: bool = False,
 ) -> BuildResult:

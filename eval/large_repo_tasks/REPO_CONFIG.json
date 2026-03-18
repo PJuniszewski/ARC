@@ -1,0 +1,9 @@
+{
+  "repo_url": "https://github.com/fastapi/fastapi.git",
+  "tag": "0.115.0",
+  "sha": "a91f76e04a6eaac5a3ab8572cbc2ad3abc6d4bc2",
+  "exclude_dirs": ["tests", "docs_src", ".github", "scripts"],
+  "snapshot_dir": "eval/large_repo_data/fastapi",
+  "description": "FastAPI ~15K LOC Python — dependency injection, routing, OpenAPI generation",
+  "rationale": "100% coverage by ARC chunkers (markdown + Python), rich cross-file architecture"
+}

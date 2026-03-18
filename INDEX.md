@@ -272,6 +272,12 @@ Content-addressed storage: SHA-256 blob store with Merkle verification.
 ### `src/arc/compressor.py`
 Claim deduplication and contested claim exclusion.
 
+### `src/arc/reasoning.py`
+Reasoning detection: causal connectives, decision verbs, contrastive markers, ADR heading patterns. Used by refinement to boost reasoning-bearing chunks.
+
+### `src/arc/refinement.py`
+Post-retrieval refinement: task-aware mode detection, raw chunk passthrough lane, code/docs classification, claim extraction on docs, reasoning boost, code minimum guarantee, token budgeting, evidence map.
+
 ### `src/arc/config.py`
 Named constants: stop words, builder defaults, loader thresholds.
 
@@ -286,10 +292,86 @@ PEP 561 marker — indicates the package ships inline type annotations.
 
 ---
 
+## Large-Repo Benchmark
+
+### `eval/large_repo_tasks/REPO_CONFIG.json`
+FastAPI snapshot config: repo URL, pinned SHA, exclude patterns.
+
+### `eval/large_repo_tasks/tasks.json`
+30 benchmark tasks (6 categories x 5) with ground truth answers, keywords, required facts.
+
+### `eval/large_repo_tasks/README.md`
+Task design rationale, category definitions, authoring methodology.
+
+### `eval/baselines/__init__.py`
+Package exports for baseline retrieval systems.
+
+### `eval/baselines/common.py`
+Shared infrastructure: `RetrievalResult` dataclass, `chunk_snapshot()`, keyword utilities.
+
+### `eval/baselines/tfidf_baseline.py`
+Baseline A: TF-IDF chunk retrieval — no semantic layer, no graph.
+
+### `eval/baselines/vector_baseline.py`
+Baseline B: Vector chunk retrieval — sentence-transformers, no semantic layer.
+
+### `eval/baselines/hybrid_baseline.py`
+Baseline C (critical ablation): Hybrid chunk retrieval — vector + keyword + heading boost, no claim extraction or evidence graph.
+
+### `eval/baselines/hybrid_refined.py`
+Baseline E: Hybrid + ARC post-retrieval refinement — fetches 30 chunks via hybrid scoring, refines with code/docs classification, claim extraction, token budgeting.
+
+### `scripts/setup_fastapi_snapshot.py`
+Clones and freezes FastAPI at pinned version for benchmarking.
+
+### `scripts/run_large_repo_benchmark.py`
+Main runner: ARC vs 4 baselines on 30 tasks. Modes: smoke/full/ragas.
+
+### `docs/current-eval-audit.md`
+Audit of existing evaluation: what exists and what the large-repo benchmark adds.
+
+### `docs/benchmark-large-repo-plan.md`
+Full methodology for large-repo benchmark.
+
+### `docs/benchmark-repo-choice.md`
+Why FastAPI was chosen over Django, LangChain, nanoclaw.
+
+### `docs/benchmark-limitations.md`
+Honest limitations: single repo, regex extraction, small task set, English only.
+
+### `docs/demo-script.md`
+5-step reproduction script for skeptical engineers.
+
+### `docs/arc_v2_failures.md`
+Failure analysis for ARC v2 post-retrieval refinement (v1): per-task recall losses, root causes, token compression by category.
+
+### `docs/hybrid_arc_recall_failure_analysis.md`
+Detailed per-task failure matrix with 7 failure modes, root cause analysis by category, prescribed fixes (passthrough lane, task-aware modes, code guarantee).
+
+### `docs/reasoning_fix_report.md`
+Reasoning boost fix: before/after metrics, per-task deltas, token impact, assessment.
+
+### `docs/positioning_arc_v2.md`
+Honest positioning memo: what ARC is/isn't, where it wins/loses vs hybrid, benchmark evidence, recommended use cases.
+
+### `docs/demo_arc_v2.md`
+Side-by-side demo of hybrid vs hybrid_arc output on 3 representative tasks.
+
+### `reports/large-repo-summary.md`
+Full benchmark results with analysis: system comparison, per-category breakdown, effect sizes, root cause diagnosis.
+
+### `reports/large-repo-results.json`
+Per-task detail: all 120 evaluations (30 tasks × 4 systems) with individual scores.
+
+### `Makefile`
+Targets: test, lint, benchmark-setup, benchmark-smoke, benchmark-full, benchmark-ragas, clean.
+
+---
+
 ## CI / GitHub
 
 ### `.github/workflows/test.yml`
-GitHub Actions CI: Python 3.10-3.13 matrix, ruff lint, pytest (non-ML/LLM).
+GitHub Actions CI: Python 3.10-3.13 matrix, ruff lint, pytest (non-ML/LLM). Optional benchmark-smoke on PRs.
 
 ---
 

@@ -10,6 +10,8 @@ build/
 .mypy_cache/
 .DS_Store
 results/
+reports/
+eval/large_repo_data/
 *.swp
 *.swo
 *~

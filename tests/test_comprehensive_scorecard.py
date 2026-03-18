@@ -498,7 +498,7 @@ class TestComprehensiveScorecard:
 
         scorecard_json = {
             "date": str(date.today()),
-            "arc_version": "0.1.0",
+            "arc_version": "1.0.0",
             "retrieval": retrieval_json,
             "security": {
                 "tamper_detection_rate": security_metrics["tamper_detection_rate"],

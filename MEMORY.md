@@ -11,7 +11,7 @@ It is intentionally short, practical, and updated often.
 **Purpose:** portable semantic archive format for AI agent context
 **Current stage:** working implementation with 181 tests, evaluation harness, production quality gate
 **Primary environment:** Claude Code
-**Test status:** 211 pass, 3 skip (LLM-dependent without API key)
+**Test status:** 233 pass, 7 skip (LLM-dependent without API key)
 
 ---
 
@@ -77,6 +77,23 @@ ARC proposes a better model:
 - Tamper detection: 100%, Rollback detection: 100%
 - Evidence traceability: 100%, Injection containment: 100%
 
+### Large-repo benchmark (FastAPI 0.115.0, 30 tasks)
+- ARC context recall: 0.388 — beats TF-IDF (0.282, d=+0.39) but loses to hybrid (0.663, d=-1.06) and vector (0.597, d=-0.77)
+- ARC evidence traceability: 1.000 (unique advantage, all baselines = 0.000)
+- Root cause of recall gap: 809 markdown doc claims dilute 45 Python code claims
+- On tied tasks, ARC uses 5-20× fewer tokens than hybrid
+
+### ARC v2: Post-retrieval refinement (hybrid_arc)
+- Context recall: 0.660 — 0.5% below hybrid (0.663), Cohen's d = -0.014 (negligible, essentially tied)
+- Token reduction: 65.1% vs hybrid (1,863 avg tokens vs 5,350)
+- Evidence traceability: 1.000, debuggability: 0.874 (all baselines: 0.000)
+- Task-aware refinement modes: implementation/decision/cross_file/feature/security/balanced
+- Reasoning boost: reasoning-bearing chunks get confidence boost in decision/security/cross_file modes
+- Raw chunk passthrough lane preserves top-k hybrid chunks verbatim for recall
+- Surpasses hybrid on cross_file_reasoning (0.810 vs 0.680) and implementation_location (0.600 vs 0.550)
+- Pipeline: hybrid fetch 30 → detect mode → passthrough top-k → classify code/docs → extract claims → reasoning boost → code guarantee → token budget cap
+- Full results: `reports/large-repo-summary.md`, reasoning fix: `docs/reasoning_fix_report.md`
+
 ---
 
 ## What is not yet implemented
@@ -113,6 +130,8 @@ ARC proposes a better model:
 - ignoring prompt injection in source material — **mitigated: injection detection + contested claim exclusion**
 - pretending provenance is optional
 - coupling too hard to one agent runtime
+- **documentation claim dilution on large repos** — markdown-heavy repos swamp code claims in the vector index (demonstrated in FastAPI benchmark)
+- **claim extraction misses reasoning** — mitigated by reasoning boost in refinement (decisions_constraints improved 0.400→0.500); security_config still at 0.600 vs hybrid 0.700 (root cause: multi-file diversity, not reasoning)
 
 ---
 

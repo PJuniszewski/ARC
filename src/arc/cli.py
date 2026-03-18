@@ -20,7 +20,7 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("source_dir", help="Source directory to archive")
     build_parser.add_argument("--out", required=True, help="Output archive path")
     build_parser.add_argument("--id", default=None, help="Archive ID")
-    build_parser.add_argument("--version", default="0.1.0", help="Archive version")
+    build_parser.add_argument("--version", default="1.0.0", help="Archive version")
     build_parser.add_argument("--parent", default=None, help="Parent archive for incremental build")
 
     # arc inspect

@@ -324,9 +324,9 @@ class Layer:
 class Manifest:
     """Root manifest describing the archive composition."""
 
-    schema_version: str = "0.1.0"
+    schema_version: str = "1.0.0"
     archive_id: str = ""
-    archive_version: str = "0.1.0"
+    archive_version: str = "1.0.0"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     root_digest: str = ""
     layers: list[Layer] = field(default_factory=list)

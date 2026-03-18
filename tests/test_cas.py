@@ -101,7 +101,7 @@ class TestContentAddressedStore:
         cas = ContentAddressedStore(tmp_path / "test.arc")
         cas.initialize()
 
-        manifest = {"schema_version": "0.1.0", "layers": []}
+        manifest = {"schema_version": "1.0.0", "layers": []}
         cas.write_manifest(manifest)
         retrieved = cas.read_manifest()
         assert retrieved == manifest
@@ -114,7 +114,7 @@ class TestContentAddressedStore:
         digest = cas.store_blob(blob_data)
 
         manifest = {
-            "schema_version": "0.1.0",
+            "schema_version": "1.0.0",
             "archive_id": "test",
             "layers": [{"digest": digest}],
         }
@@ -133,7 +133,7 @@ class TestContentAddressedStore:
 
         digest = cas.store_blob(b"original")
         manifest = {
-            "schema_version": "0.1.0",
+            "schema_version": "1.0.0",
             "layers": [{"digest": digest}],
         }
         manifest_copy = dict(manifest)
