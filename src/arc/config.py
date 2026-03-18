@@ -50,3 +50,59 @@ STOP_WORDS: frozenset[str] = frozenset({
     "this", "with", "from", "has", "have", "does", "did", "will",
     "can", "should", "would", "could", "may", "use", "used",
 })
+
+# --- Scoped retrieval limits ---
+
+# Max files after scope reduction
+MAX_SCOPE_FILES: int = 50
+
+# Max chunks after phase 1 narrowing
+MAX_PHASE1_CHUNKS: int = 200
+
+# Max chunks into phase 2 hybrid scoring
+MAX_PHASE2_CHUNKS: int = 30
+
+# Max claims in final output
+MAX_SCOPED_CLAIMS: int = 20
+
+# Max raw chunks kept verbatim
+MAX_RAW_PASSTHROUGH: int = 8
+
+# Token budget for scoped output
+SCOPED_TOKEN_BUDGET: int = 4000
+
+# Min score for path inclusion in scope
+PATH_MATCH_THRESHOLD: float = 0.3
+
+# --- Retrieval hygiene penalties ---
+
+# Score multiplier for migration data files (0001_initial.py etc.)
+MIGRATION_SCORE_PENALTY: float = 0.3
+
+# Score multiplier for short keyword-heavy chunks
+SHORT_CHUNK_PENALTY: float = 0.4
+
+# Score multiplier for boilerplate __init__.py files
+BOILERPLATE_PENALTY: float = 0.5
+
+# Token threshold below which a chunk is considered "short"
+SHORT_CHUNK_TOKEN_THRESHOLD: int = 10
+
+# --- Dynamic retrieval-k by query mode ---
+
+# retrieval_k for cross-file queries
+CROSS_FILE_RETRIEVAL_K: int = 55
+
+# retrieval_k for feature-scoped queries
+FEATURE_RETRIEVAL_K: int = 45
+
+# --- Sibling chunk expansion ---
+
+# Max sibling chunks added per file
+MAX_SIBLINGS_PER_FILE: int = 2
+
+# Max total expansion chunks across all files
+MAX_EXPANSION_TOTAL: int = 8
+
+# Minimum hybrid score for a sibling to be eligible
+SIBLING_MIN_SCORE: float = 0.10
