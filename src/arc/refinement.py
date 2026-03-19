@@ -19,7 +19,7 @@ from typing import Optional
 
 from .compressor import _count_tokens, deduplicate_claims
 from .extractor import extract_claims
-from .models import Claim, EvidencePointer, Resource, TextUnit, _generate_id
+from .models import EvidencePointer, Resource, TextUnit, _generate_id
 from .reasoning import has_reasoning
 
 
@@ -63,7 +63,7 @@ MODES = {
 _MODE_PATTERNS = [
     (re.compile(r"\b(where|locate|which\s+file|location)\b", re.IGNORECASE), "implementation"),
     (re.compile(r"\b(why|chose|instead|rather than)\b", re.IGNORECASE), "decision"),
-    (re.compile(r"\b(flow|interact|propagat|across|between|chain|lifecycle|pipeline|from .+ to)\b", re.IGNORECASE), "cross_file"),
+    (re.compile(r"\b(flow|interact|propagat|across|between|chain|lifecycle|pipeline)\b", re.IGNORECASE), "cross_file"),
     (re.compile(r"\b(security|auth|oauth|cors|tls|permission|scope)\b", re.IGNORECASE), "security"),
     (re.compile(r"\bhow\s+does\b", re.IGNORECASE), "feature"),
 ]

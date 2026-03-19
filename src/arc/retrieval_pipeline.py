@@ -35,7 +35,7 @@ from .config import (
 from .embeddings import VectorStore, get_embedder
 from .models import Resource, TextUnit
 from .refinement import ChunkWithMeta, RefinementResult, refine
-from .scope import RepoMetadata, ScopePlan, build_repo_metadata, infer_scope
+from .scope import ScopePlan, build_repo_metadata, infer_scope
 
 
 # ── Configuration ────────────────────────────────────────────────

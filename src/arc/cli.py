@@ -58,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     load_parser.add_argument("--task", default=None, help="Task for selective loading")
     load_parser.add_argument("--layer", action="append", default=None, help="Specific layers to load")
     load_parser.add_argument("--raw", action="store_true", help="Search raw source chunks instead of extracted claims")
-    load_parser.add_argument("--code", action="store_true", help="Filter to code files only (exclude .md, .txt, .json, .yaml)")
+    load_parser.add_argument(
+        "--code", action="store_true", help="Filter to code files only (exclude .md, .txt, .json, .yaml)"
+    )
     load_parser.add_argument("--ext", default=None, help="Filter to specific extension (e.g. --ext .kt)")
 
     # arc diff

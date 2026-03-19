@@ -234,10 +234,7 @@ _st_cache: dict = {}
 
 def _load_st_quietly(cls, model_name: str):
     """Load SentenceTransformer while suppressing C-level stdout/stderr noise."""
-    import contextlib
-    import io
     import os
-    import sys
 
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
     old_stderr_fd = os.dup(2)
