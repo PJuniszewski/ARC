@@ -6,6 +6,7 @@ on:
 
 jobs:
   metrics:
+    name: Test metrics & report
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,6 +88,7 @@ jobs:
           " || true
 
   benchmark-smoke:
+    name: Benchmark smoke (FastAPI)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
