@@ -126,18 +126,6 @@ ARC preserves near-hybrid retrieval quality while making every result traceable 
 <!-- BENCHMARK-START -->
 30 tasks per repo, 6 categories. Context recall = fraction of required facts found.
 
-### FastAPI (15K LOC, 130 files)
-
-| System | Context Recall | Traceability | Debuggability | Token Efficiency |
-|--------| ------------- | ------------- | ------------- | ------------- |
-| hybrid | 0.350 | 0.000 | 0.000 | 0.999 |
-| **hybrid_arc** | **0.350** | **1.000** | **0.916** | **0.998** |
-| vector | 0.300 | 0.000 | 0.000 | 0.999 |
-| arc | 0.200 | 1.000 | 0.000 | 0.998 |
-| tfidf | 0.300 | 0.000 | 0.000 | 0.999 |
-
-hybrid_arc vs hybrid: d = +0.000 (negligible)
-
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
 
