@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Clone and freeze FastAPI at a pinned version for large-repo benchmarking.
+"""Clone and freeze a repository at a pinned version for large-repo benchmarking.
 
 Usage:
     python scripts/setup_fastapi_snapshot.py [--force]
+    python scripts/setup_fastapi_snapshot.py --config path/to/config.json [--force]
 """
 
 from __future__ import annotations
@@ -14,15 +15,19 @@ import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-REPO_CONFIG_PATH = PROJECT_ROOT / "eval" / "large_repo_tasks" / "REPO_CONFIG.json"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "eval" / "large_repo_tasks" / "fastapi" / "REPO_CONFIG.json"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Set up FastAPI snapshot for benchmarking")
+    parser = argparse.ArgumentParser(description="Set up repository snapshot for benchmarking")
     parser.add_argument("--force", action="store_true", help="Re-clone even if snapshot exists")
+    parser.add_argument(
+        "--config", type=Path, default=DEFAULT_CONFIG_PATH,
+        help="Path to repo config JSON (default: FastAPI)",
+    )
     args = parser.parse_args()
 
-    config = json.loads(REPO_CONFIG_PATH.read_text())
+    config = json.loads(args.config.read_text())
     repo_url = config["repo_url"]
     tag = config["tag"]
     exclude_dirs = config["exclude_dirs"]
@@ -38,7 +43,8 @@ def main():
         shutil.rmtree(snapshot_dir)
 
     # Clone at specific tag into a temp directory
-    tmp_clone = snapshot_dir.parent / "_fastapi_clone_tmp"
+    repo_name = snapshot_dir.name
+    tmp_clone = snapshot_dir.parent / f"_{repo_name}_clone_tmp"
     if tmp_clone.exists():
         shutil.rmtree(tmp_clone)
 

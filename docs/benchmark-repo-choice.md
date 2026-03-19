@@ -15,7 +15,7 @@ The benchmark repo must:
 | Repo | LOC | Languages | Cross-file depth | Decision docs | Verdict |
 |------|-----|-----------|-----------------|---------------|---------|
 | **FastAPI** | ~15K | Python + MD | High (DI → routing → OpenAPI) | Extensive docs/ | **Selected** |
-| Django | ~300K | Python | Very high | Good | Too large — would require sampling |
+| Django | ~300K | Python | Very high | Good | **Added** — scaling target for scoped retrieval |
 | LangChain | ~50K | Python + TS | Medium | Sparse | Too unstable — API changes weekly |
 | nanoclaw | ~500 | Python | Low | None | Too small — trivial retrieval |
 | Flask | ~8K | Python | Medium | Moderate | Viable but less architectural depth |
@@ -52,6 +52,32 @@ FastAPI's documentation explicitly explains *why* design choices were made:
 - Why declaration-order route matching
 
 This enables "decisions/constraints" category tasks with verifiable ground truth.
+
+## Django as Scaling Target
+
+Django (~300K LOC) was added as the second benchmark repo to validate scoped retrieval at 20x FastAPI scale.
+
+### Why Django
+
+- **Clear directory boundaries**: `django/db/`, `django/template/`, `django/contrib/auth/` etc. — ideal for scope inference testing
+- **Deep cross-file chains**: ORM (query.py → sql/query.py → sql/compiler.py → lookups.py), auth (views.py → __init__.py → backends.py → middleware.py → sessions)
+- **Rich design decisions**: Active Record pattern, template engine philosophy, WSGI-first with incremental async, migration system design
+- **Stable release**: Tag 5.1 provides a reproducible snapshot
+- **Known quantity**: Widely understood architecture enables task validation
+
+### Django Benchmark Tasks
+
+30 tasks across 6 categories: architecture (5), feature_behavior (5), implementation_location (5), cross_file_reasoning (5), decisions_constraints (5), security_config (5).
+
+- Cross-file: 22/30 (73%)
+- Hard: 15, Medium: 12, Easy: 3
+- Smoke tasks: 5 (one per non-security category)
+
+### Django Benchmark Constraints
+
+- **Not in CI**: Django snapshot is too large for PR smoke tests. Manual runs only.
+- **Embedding build time**: Expected ~10x longer than FastAPI due to corpus size. Cache module helps for repeated runs.
+- **Task file paths**: Validated against Django 5.1 source structure. Must be re-checked if tag changes.
 
 ## Snapshot Strategy
 

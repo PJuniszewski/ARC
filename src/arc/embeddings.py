@@ -232,6 +232,29 @@ class TfidfEmbedder:
 _st_cache: dict = {}
 
 
+def _load_st_quietly(cls, model_name: str):
+    """Load SentenceTransformer while suppressing C-level stdout/stderr noise."""
+    import contextlib
+    import io
+    import os
+    import sys
+
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    old_stderr_fd = os.dup(2)
+    old_stdout_fd = os.dup(1)
+    try:
+        os.dup2(devnull_fd, 2)
+        os.dup2(devnull_fd, 1)
+        model = cls(model_name)
+    finally:
+        os.dup2(old_stderr_fd, 2)
+        os.dup2(old_stdout_fd, 1)
+        os.close(old_stderr_fd)
+        os.close(old_stdout_fd)
+        os.close(devnull_fd)
+    return model
+
+
 def try_load_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
     """Try to load sentence-transformers. Returns embedder or None.
 
@@ -245,7 +268,7 @@ def try_load_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
 
         class SentenceTransformerEmbedder:
             def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-                self.model = SentenceTransformer(model_name)
+                self.model = _load_st_quietly(SentenceTransformer, model_name)
                 self.dimensions = self.model.get_sentence_embedding_dimension()
                 self.model_name = model_name
                 self.fitted = True  # pre-trained

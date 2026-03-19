@@ -7,7 +7,7 @@
 ## Key Findings
 
 ### Agent context reconstruction is the core problem
-- **Source**: Project thesis, Deep arc .md
+- **Source**: Project thesis
 - **When**: Project inception
 - **Finding**: Agents waste tokens and reliability because they reconstruct context at runtime from messy sources. More data (connecting Slack, Gmail, Jira, GitHub) makes models drown — they pull irrelevant context and produce worse results than giving them nothing.
 - **Impact**: This isn't a tooling problem — it's an information architecture problem. The model needs the right data, structured so it can use it.
@@ -25,7 +25,7 @@
 - **Impact**: Validates the boring-composable-blocks approach over novel formats
 
 ### Semantic compression must preserve traceability
-- **Source**: Deep arc .md (ML algorithms section)
+- **Source**: Architecture research
 - **When**: Research phase
 - **Finding**: Aggressive compression improves context efficiency but can destroy provenance chains. The trust boundary for compression aggressiveness needs empirical evaluation.
 - **Impact**: Evaluation harness (Phase 5) is critical — can't ship compression without fidelity benchmarks
@@ -55,7 +55,6 @@ Source: docs/research/market-landscape.md
 
 | Document | Location | Contains |
 |----------|----------|----------|
-| Deep arc .md | `/home/user/agent-archive/Deep arc .md` | Full research document (PL) — architecture, data models, security, ML, evaluation |
 | Market landscape | `docs/research/market-landscape.md` | Related tools and gaps analysis |
 | Source notes | `docs/research/source-notes.md` | Distilled notes from papers and standards |
 | Open questions | `docs/research/open-questions.md` | Unresolved research threads |

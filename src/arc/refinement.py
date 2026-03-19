@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from .compressor import _count_tokens, deduplicate_claims
@@ -27,6 +28,7 @@ CODE_WEIGHT = 1.5
 DOCS_WEIGHT = 0.7
 MAX_REFINED_ITEMS = 15
 DEFAULT_TOKEN_BUDGET = 3700  # Target: >=30% below hybrid's ~5350 tokens
+CROSS_FILE_TOKEN_BUDGET = 5000  # Cross-file tasks need more headroom (still 7% below hybrid)
 MAX_ITEM_TOKENS = 800  # Truncate any single item beyond this
 
 # Patterns indicating code content
@@ -51,7 +53,7 @@ class RefinementMode:
 MODES = {
     "implementation": RefinementMode("implementation", 5, 2.0, 0.5, 1000, 2, 0.0),
     "decision": RefinementMode("decision", 4, 1.5, 0.7, 800, 1, 0.6),
-    "cross_file": RefinementMode("cross_file", 4, 1.8, 0.6, 900, 2, 0.3),
+    "cross_file": RefinementMode("cross_file", 6, 1.8, 0.6, 900, 3, 0.3),
     "feature": RefinementMode("feature", 3, 1.5, 0.7, 800, 2, 0.0),
     "security": RefinementMode("security", 4, 1.5, 0.7, 800, 2, 0.3),
     "balanced": RefinementMode("balanced", 3, 1.5, 0.7, 800, 2, 0.0),
@@ -61,7 +63,7 @@ MODES = {
 _MODE_PATTERNS = [
     (re.compile(r"\b(where|locate|which\s+file|location)\b", re.IGNORECASE), "implementation"),
     (re.compile(r"\b(why|chose|instead|rather than)\b", re.IGNORECASE), "decision"),
-    (re.compile(r"\b(flow|interact|propagat|across|between)\b", re.IGNORECASE), "cross_file"),
+    (re.compile(r"\b(flow|interact|propagat|across|between|chain|lifecycle|pipeline|from .+ to)\b", re.IGNORECASE), "cross_file"),
     (re.compile(r"\b(security|auth|oauth|cors|tls|permission|scope)\b", re.IGNORECASE), "security"),
     (re.compile(r"\bhow\s+does\b", re.IGNORECASE), "feature"),
 ]
@@ -127,6 +129,21 @@ def _detect_source_type(chunk: ChunkWithMeta) -> str:
     return "docs"
 
 
+def _get_item_source_file(
+    item: RefinedItem,
+    text_units_by_id: dict[str, TextUnit],
+    resources_by_id: dict[str, Resource],
+) -> str:
+    """Extract source file path from a RefinedItem's evidence chain."""
+    if item.evidence:
+        tu = text_units_by_id.get(item.evidence[0].source_unit_id)
+        if tu:
+            res = resources_by_id.get(tu.resource_id)
+            if res:
+                return res.locator
+    return ""
+
+
 def refine(
     chunks: list[ChunkWithMeta],
     text_units_by_id: dict[str, TextUnit],
@@ -155,6 +172,17 @@ def refine(
 
     # Step 1: Detect mode
     mode = detect_mode(question)
+
+    # Cross-file tasks get expanded token budget
+    if mode.name == "cross_file":
+        token_budget = max(token_budget, CROSS_FILE_TOKEN_BUDGET)
+
+        # Scale budget by input file diversity
+        input_files = {c.resource.locator for c in chunks if c.resource}
+        if len(input_files) >= 6:
+            token_budget = max(token_budget, 7000)
+        elif len(input_files) >= 4:
+            token_budget = max(token_budget, 6000)
 
     # Step 2: Classify and resolve metadata
     for chunk in chunks:
@@ -189,6 +217,27 @@ def refine(
                 evidence=evidence,
             )
         )
+
+    # Step 3b: Neighboring-file boost for cross_file mode
+    if mode.name == "cross_file":
+        passthrough_files: set[str] = set()
+        for item in passthrough_items:
+            if item.evidence:
+                tu = text_units_by_id.get(item.evidence[0].source_unit_id)
+                if tu:
+                    res = resources_by_id.get(tu.resource_id)
+                    if res:
+                        passthrough_files.add(res.locator)
+
+        # Boost chunks from same directory as passthrough files
+        passthrough_dirs = {str(Path(f).parent) for f in passthrough_files}
+        for chunk in chunks:
+            if chunk.chunk_id in passthrough_ids:
+                continue
+            if chunk.resource:
+                chunk_dir = str(Path(chunk.resource.locator).parent)
+                if chunk_dir in passthrough_dirs:
+                    chunk.score = max(chunk.score, 0.5)  # floor score for neighbors
 
     # Step 4: Classify remaining chunks (exclude passthrough)
     remaining_chunks = [c for c in chunks if c.chunk_id not in passthrough_ids]
@@ -322,16 +371,43 @@ def refine(
             item.text = " ".join(words[: mode.max_item_tokens])
 
     # Step 10: Cap by max_items and token_budget (whichever hits first)
-    budget_items: list[RefinedItem] = []
-    running_tokens = 0
-    for item in items:
-        item_tokens = _count_tokens(item.text)
-        if budget_items and running_tokens + item_tokens > token_budget:
-            break
-        budget_items.append(item)
-        running_tokens += item_tokens
-        if len(budget_items) >= max_items:
-            break
+    if mode.name == "cross_file":
+        # Phase A: File-diversity guarantee — first unseen-file item goes first
+        seen_files: set[str] = set()
+        diversity_items: list[RefinedItem] = []
+        remainder_items: list[RefinedItem] = []
+        for item in items:
+            src = _get_item_source_file(item, text_units_by_id, resources_by_id)
+            if src and src not in seen_files:
+                seen_files.add(src)
+                diversity_items.append(item)
+            else:
+                remainder_items.append(item)
+
+        # Phase B: Fill budget — diversity items first, then remainder
+        # Use `continue` not `break` — skip large items, keep packing small ones
+        budget_items: list[RefinedItem] = []
+        running_tokens = 0
+        for item in diversity_items + remainder_items:
+            item_tokens = _count_tokens(item.text)
+            if budget_items and running_tokens + item_tokens > token_budget:
+                continue  # skip this item, try smaller ones
+            budget_items.append(item)
+            running_tokens += item_tokens
+            if len(budget_items) >= max_items:
+                break
+    else:
+        # Original greedy for non-cross_file modes
+        budget_items: list[RefinedItem] = []
+        running_tokens = 0
+        for item in items:
+            item_tokens = _count_tokens(item.text)
+            if budget_items and running_tokens + item_tokens > token_budget:
+                break
+            budget_items.append(item)
+            running_tokens += item_tokens
+            if len(budget_items) >= max_items:
+                break
     items = budget_items
 
     # Empty extraction fallback

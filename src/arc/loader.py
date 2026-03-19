@@ -29,7 +29,7 @@ from .config import (
     TOP_K_FLOOR,
     TOP_K_RATIO,
 )
-from .models import Claim, Decision, Manifest, PolicyRule, TextUnit, ToolDeclaration, WorkflowStep
+from .models import Claim, Decision, Manifest, PolicyRule, Resource, TextUnit, ToolDeclaration, WorkflowStep
 
 
 @dataclass
@@ -37,6 +37,7 @@ class LoadedArchive:
     """Typed access to loaded archive content."""
 
     manifest: Manifest
+    resources: list[Resource] = field(default_factory=list)
     source_units: list[TextUnit] = field(default_factory=list)
     claims: list[Claim] = field(default_factory=list)
     decisions: list[Decision] = field(default_factory=list)
@@ -235,7 +236,9 @@ def load(
             loaded.reason = f"Corrupt JSON in layer '{layer.name}': {e}"
             return loaded
 
-        if layer.type == "semantic.source_units":
+        if layer.type == "semantic.resources":
+            loaded.resources = [Resource.from_dict(d) for d in data]
+        elif layer.type == "semantic.source_units":
             loaded.source_units = [TextUnit.from_dict(d) for d in data]
         elif layer.type == "semantic.claims":
             loaded.claims = [Claim.from_dict(d) for d in data]

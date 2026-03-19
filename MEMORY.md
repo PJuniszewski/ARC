@@ -83,35 +83,17 @@ ARC proposes a better model:
 - Root cause of recall gap: 809 markdown doc claims dilute 45 Python code claims
 - On tied tasks, ARC uses 5-20× fewer tokens than hybrid
 
-### ARC v2: Post-retrieval refinement (hybrid_arc) — PRODUCTION
-- **Status: production-ready**, validated on FastAPI (15K LOC) + Django (155K LOC)
-- FastAPI: recall 0.660 (0.5% below hybrid, d=-0.014 negligible), traceability 1.0, debuggability 0.874
-- Django: recall 0.762 (7% below hybrid 0.820, d=-0.291 small), traceability 1.0, debuggability 0.937
-- Token reduction: 65%+ vs hybrid on both repos
-- Task-aware refinement modes: implementation/decision/cross_file/feature/security/balanced
-- Cross-file boost: passthrough_k=6, neighboring-file score boost, 5000-token budget for cross_file mode
-- Reasoning boost: reasoning-bearing chunks get confidence boost in decision/security/cross_file modes
-- Raw chunk passthrough lane preserves top-k hybrid chunks verbatim for recall
-- Pipeline: hybrid fetch 30 → detect mode → passthrough top-k → neighbor boost → classify code/docs → extract claims → reasoning boost → code guarantee → token budget cap
-- Full results: `reports/large-repo-summary-{repo}.md`, comparison: `docs/benchmark-fastapi-vs-django.md`
-
-### Scoped retrieval pipeline (scoped_arc) — EXPERIMENTAL
-- **Status: experimental**, fails at scale (Django recall 0.242 vs hybrid_arc 0.762)
-- Two-phase pipeline: scope reduction → hybrid scoring on scoped chunks → ARC refine
-- Works on small repos (<30K LOC) but scope inference fails on deep directory structures (>100K LOC)
-- Not included in default benchmark runs; available via `--systems scoped_arc`
-- Root cause: heuristic scope inference can't handle deep directories, cross-cutting concerns
-- Modules: `src/arc/scope.py`, `src/arc/retrieval_pipeline.py`, `src/arc/cache.py`, `eval/baselines/scoped_refined.py`
-- Design docs: `docs/large_repo_scaling_plan.md`, `docs/large_repo_positioning.md`
-
-### Multi-repo benchmark infrastructure
-- Benchmark runner parameterized with `--repo` flag (default: fastapi)
-- Task files in `eval/large_repo_tasks/{repo}/` subdirectories
-- Django (155K LOC) validated: 30 tasks, tag 5.1
-- Default systems: tfidf, vector, hybrid, arc, hybrid_arc (scoped_arc excluded from defaults)
-- Django benchmark is manual only (not in CI — too slow for PRs)
-- Reports: `reports/large-repo-results-{repo}.json`, `reports/large-repo-summary-{repo}.md`
-- Comparison report: `docs/benchmark-fastapi-vs-django.md`, demo: `docs/demo-django.md`
+### Retrieval: hybrid_arc (production) and scoped_arc (experimental)
+- **hybrid_arc** (HybridRefinedRetriever): production-ready, validated on FastAPI (15K LOC) + Django (155K LOC)
+  - FastAPI recall 0.660 (d=-0.014 vs hybrid), Django recall 0.762 (d=-0.291 vs hybrid 0.820)
+  - Traceability 1.0, debuggability >0.87, token reduction 65%+
+  - Pipeline: hybrid fetch → task-aware mode → passthrough + neighbor boost → classify → extract → reasoning boost → budget cap
+- **scoped_arc**: experimental, fails at scale (Django recall 0.242). Not in default benchmark runs.
+  - Modules: `src/arc/scope.py`, `src/arc/retrieval_pipeline.py`, `src/arc/cache.py`
+  - Design: `docs/large_repo_positioning.md`
+- **Benchmark infrastructure**: `--repo` flag (fastapi/django), 30 tasks each, reports in `reports/`
+  - Comparison: `docs/benchmark-fastapi-vs-django.md`
+  - Django benchmark is manual only (not in CI)
 
 ---
 
@@ -149,10 +131,8 @@ ARC proposes a better model:
 - ignoring prompt injection in source material — **mitigated: injection detection + contested claim exclusion**
 - pretending provenance is optional
 - coupling too hard to one agent runtime
-- **documentation claim dilution on large repos** — markdown-heavy repos swamp code claims in the vector index (demonstrated in FastAPI benchmark); mitigated by scoped retrieval pipeline
-- **claim extraction misses reasoning** — mitigated by reasoning boost in refinement (decisions_constraints improved 0.400→0.500); security_config still at 0.600 vs hybrid 0.700 (root cause: multi-file diversity, not reasoning)
-- **scope inference fails on vague queries** — queries without path/symbol/keyword signals produce weak scope, fallback to full corpus
-- **scoped_arc fails at scale** — Django benchmark recall 0.242 vs hybrid_arc 0.762; scope inference can't handle deep directory structures; demoted to experimental
+- **documentation claim dilution on large repos** — markdown-heavy repos swamp code claims; mitigated by hybrid_arc refinement pipeline
+- **scoped_arc fails at scale** — Django recall 0.242 vs hybrid_arc 0.762; demoted to experimental (see `docs/large_repo_positioning.md`)
 
 ---
 

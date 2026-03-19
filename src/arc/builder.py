@@ -6,9 +6,10 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ def build_archive(
     archive_version: str = "1.0.0",
     parent_archive: Optional[str | Path] = None,
     force_tfidf: bool = False,
+    on_progress: Optional[Callable[[str, str], None]] = None,
 ) -> BuildResult:
     """Build an ARC archive from source directory.
 
@@ -69,9 +71,16 @@ def build_archive(
     6. Index: generate embeddings
     7. Assemble: write blobs to CAS, build manifest
     8. Validate: verify all references
+
+    Args:
+        on_progress: optional callback(stage, detail) for progress reporting.
     """
     source_dir = Path(source_dir)
     output_dir = Path(output_dir)
+
+    def _progress(stage: str, detail: str = "") -> None:
+        if on_progress:
+            on_progress(stage, detail)
 
     if not archive_id:
         archive_id = f"arc://{source_dir.name}"
@@ -91,27 +100,38 @@ def build_archive(
     })
 
     # === Stage 1: Ingest ===
+    _progress("1/8", "Scanning files...")
     resources = _ingest(source_dir, provenance)
+    _progress("1/8", f"Found {len(resources)} files")
 
     # === Stage 2 & 3: Normalize + Chunk ===
+    _progress("2/8", "Chunking...")
     text_units = _chunk(resources, source_dir)
+    _progress("2/8", f"Produced {len(text_units)} chunks")
 
     # === Stage 4: Extract ===
+    _progress("3/8", "Extracting claims and decisions...")
     claims = extract_claims(text_units)
     decisions = extract_decisions(text_units)
     tools = extract_tools(text_units, resources, source_dir)
     policies = extract_policies(text_units, resources, source_dir)
     workflow_steps = extract_workflow(text_units, resources, source_dir)
+    _progress("3/8", f"Extracted {len(claims)} claims, {len(decisions)} decisions")
 
     # === Stage 5: Deduplicate ===
+    _progress("4/8", "Deduplicating claims...")
     dedup = deduplicate_claims(claims)
     deduped_claims = dedup.claims
+    if dedup.duplicates_removed > 0:
+        _progress("4/8", f"Removed {dedup.duplicates_removed} duplicates")
 
     # === Stage 6: Index (embeddings) ===
+    _progress("5/8", "Building embeddings...")
     embedder = get_embedder(dimensions=256, force_tfidf=force_tfidf)
     all_texts = [tu.content for tu in text_units] + [c.text for c in deduped_claims]
     if all_texts:
         embedder.fit(all_texts)
+    _progress("5/8", f"Indexed {len(all_texts)} items")
 
     vector_store = VectorStore(index_info=embedder.get_index_info())
     if hasattr(embedder, 'vocab') and hasattr(embedder, 'idf'):
@@ -137,7 +157,18 @@ def build_archive(
         vector_store.add(step.id, vec, f"workflow:{step.name}: {step.description}", {"kind": "workflow"})
 
     # === Stage 7: Assemble ===
+    _progress("6/8", "Assembling archive...")
     layers = []
+
+    # Resources layer (file metadata with locators)
+    res_data = json.dumps([r.to_dict() for r in resources], indent=2, sort_keys=True).encode()
+    res_digest = cas.store_blob(res_data)
+    layers.append(Layer(
+        name="resources",
+        type="semantic.resources",
+        digest=res_digest,
+        required=True,
+    ))
 
     # Source units layer
     su_data = json.dumps([tu.to_dict() for tu in text_units], indent=2, sort_keys=True).encode()
@@ -147,6 +178,7 @@ def build_archive(
         type="semantic.source_units",
         digest=su_digest,
         required=True,
+        depends_on=["resources"],
     ))
 
     # Claims layer (deduplicated)
@@ -239,6 +271,7 @@ def build_archive(
     )
 
     # === Stage 8: Validate ===
+    _progress("7/8", "Validating references...")
     errors = validate_manifest(manifest)
 
     # Check all blob references exist
@@ -270,8 +303,10 @@ def build_archive(
         )
 
     # Write manifest
+    _progress("8/8", "Writing manifest...")
     write_manifest_to_cas(manifest, cas)
 
+    _progress("done", "Archive built")
     return BuildResult(
         archive_path=str(output_dir),
         manifest=manifest,
@@ -287,20 +322,46 @@ def build_archive(
     )
 
 
+_SOURCE_EXTENSIONS = {
+    ".md", ".txt", ".py", ".js", ".ts", ".tsx", ".jsx",
+    ".json", ".yaml", ".yml", ".toml",
+    ".kt", ".kts", ".java", ".swift", ".go", ".rs", ".rb",
+    ".c", ".h", ".cpp", ".hpp", ".cs", ".scala",
+    ".sh", ".bash", ".zsh",
+    ".sql", ".graphql", ".proto",
+    ".xml", ".gradle",
+}
+
+# Directories always skipped during ingest (build artifacts, deps, caches)
+_SKIP_DIRS = {
+    "build", "dist", "out", "target",
+    "node_modules", "__pycache__", ".gradle",
+    "Pods", "DerivedData",
+    "intermediates", "generated", "tmp", "outputs",
+    ".git", ".hg", ".svn",
+    "vendor", "venv", ".venv", "env",
+}
+
+
 def _ingest(source_dir: Path, provenance: BuildProvenance) -> list[Resource]:
     """Stage 1: Scan source directory and create Resource objects."""
     resources = []
-    extensions = {".md", ".txt", ".py", ".js", ".ts", ".json", ".yaml", ".yml", ".toml"}
 
-    for root, _dirs, files in os.walk(source_dir):
-        # Skip hidden directories
+    for root, dirs, files in os.walk(source_dir):
         root_path = Path(root)
+
+        # Skip hidden and build artifact directories (prune in-place)
+        dirs[:] = [
+            d for d in dirs
+            if not d.startswith(".") and d not in _SKIP_DIRS
+        ]
+
         if any(part.startswith(".") for part in root_path.relative_to(source_dir).parts):
             continue
 
         for fname in sorted(files):
             fpath = root_path / fname
-            if fpath.suffix not in extensions:
+            if fpath.suffix not in _SOURCE_EXTENSIONS:
                 continue
 
             content = fpath.read_bytes()
@@ -338,6 +399,8 @@ def _chunk(resources: list[Resource], source_dir: Path) -> list[TextUnit]:
             units = _chunk_markdown(content, resource.id)
         elif ext in (".py",):
             units = _chunk_python(content, resource.id)
+        elif ext in (".kt", ".kts", ".java", ".swift", ".go", ".rs", ".scala", ".cs"):
+            units = _chunk_curly_brace(content, resource.id)
         else:
             units = _chunk_generic(content, resource.id)
 
@@ -429,6 +492,50 @@ def _chunk_python(content: str, resource_id: str) -> list[TextUnit]:
             block_content = "\n".join(current_block).strip()
             if block_content and len(block_content) > 20:
                 kind = "function" if any(l.startswith("def ") for l in current_block) else "section"
+                units.append(TextUnit(
+                    id=_generate_id(),
+                    resource_id=resource_id,
+                    kind=kind,
+                    content=block_content,
+                    span=(block_start, i - 1),
+                ))
+            current_block = [line]
+            block_start = i
+        else:
+            current_block.append(line)
+
+    if current_block:
+        block_content = "\n".join(current_block).strip()
+        if block_content and len(block_content) > 20:
+            units.append(TextUnit(
+                id=_generate_id(),
+                resource_id=resource_id,
+                kind="section",
+                content=block_content,
+                span=(block_start, block_start + len(current_block) - 1),
+            ))
+
+    return units
+
+
+def _chunk_curly_brace(content: str, resource_id: str) -> list[TextUnit]:
+    """Chunk Kotlin/Java/Swift/Go/Rust/etc. by top-level declarations."""
+    units = []
+    lines = content.split("\n")
+
+    # Top-level declarations: fun, class, interface, object, enum, struct, impl, func
+    _TOP_LEVEL = re.compile(
+        r'^(?:(?:public|private|protected|internal|open|abstract|override|suspend|data|sealed|inline|actual|expect)\s+)*'
+        r'(?:fun |class |interface |object |enum |struct |impl |func |fn |extension )'
+    )
+
+    current_block: list[str] = []
+    block_start = 1
+    for i, line in enumerate(lines, start=1):
+        if _TOP_LEVEL.match(line) and current_block:
+            block_content = "\n".join(current_block).strip()
+            if block_content and len(block_content) > 20:
+                kind = "function" if re.search(r'\b(fun |func |fn )\b', block_content[:200]) else "class"
                 units.append(TextUnit(
                     id=_generate_id(),
                     resource_id=resource_id,

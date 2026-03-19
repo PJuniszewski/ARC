@@ -340,47 +340,17 @@ Clones and freezes a repository at pinned version for benchmarking. Accepts `--c
 ### `scripts/run_large_repo_benchmark.py`
 Main runner: ARC vs 5 baselines (+ scoped_arc) on tasks. Accepts `--repo` (fastapi, django). Modes: smoke/full/ragas.
 
-### `docs/current-eval-audit.md`
-Audit of existing evaluation: what exists and what the large-repo benchmark adds.
-
-### `docs/benchmark-large-repo-plan.md`
-Full methodology for large-repo benchmark.
-
 ### `docs/benchmark-repo-choice.md`
 Why FastAPI was chosen over Django, LangChain, nanoclaw.
 
 ### `docs/benchmark-limitations.md`
 Honest limitations: single repo, regex extraction, small task set, English only.
 
-### `docs/demo-script.md`
-5-step reproduction script for skeptical engineers.
-
-### `docs/arc_v2_failures.md`
-Failure analysis for ARC v2 post-retrieval refinement (v1): per-task recall losses, root causes, token compression by category.
-
-### `docs/hybrid_arc_recall_failure_analysis.md`
-Detailed per-task failure matrix with 7 failure modes, root cause analysis by category, prescribed fixes (passthrough lane, task-aware modes, code guarantee).
-
-### `docs/reasoning_fix_report.md`
-Reasoning boost fix: before/after metrics, per-task deltas, token impact, assessment.
-
-### `docs/positioning_arc_v2.md`
-Honest positioning memo: what ARC is/isn't, where it wins/loses vs hybrid, benchmark evidence, recommended use cases.
-
-### `docs/demo_arc_v2.md`
-Side-by-side demo of hybrid vs hybrid_arc output on 3 representative tasks.
-
-### `docs/large_repo_scaling_plan.md`
-Scaling plan for 100k+ LOC repos: scoped two-phase retrieval architecture, candidate repos, success criteria, failure modes.
-
 ### `docs/large_repo_positioning.md`
 Honest assessment of where scoped ARC will and won't work at scale. Includes Django benchmark results showing scoped_arc failure. Assumptions, failure modes, non-claims.
 
 ### `docs/benchmark-fastapi-vs-django.md`
 Polished comparison report: hybrid_arc across FastAPI (15K LOC) and Django (155K LOC). System tables, per-category analysis, cross-file bottleneck diagnosis, scoped_arc assessment, product recommendation.
-
-### `docs/demo-django.md`
-5-step reproduction for Django benchmark. Setup, smoke test, full run, interpretation guide. Approximate timings and expected outputs.
 
 ### `reports/large-repo-summary-{repo}.md`
 Full benchmark results with analysis: system comparison, per-category breakdown, effect sizes, root cause diagnosis. Per-repo (fastapi, django).
