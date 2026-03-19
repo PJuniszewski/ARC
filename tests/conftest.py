@@ -1,4 +1,4 @@
-"""Shared fixtures for ARC Archive tests."""
+"""Shared fixtures for ARC tests."""
 
 from __future__ import annotations
 

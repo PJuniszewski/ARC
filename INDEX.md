@@ -34,11 +34,6 @@ Use for:
 - file discovery
 - finding the right source of truth quickly
 
-### `CHANGELOG.md`
-Use for:
-- release history
-- user-visible changes per version
-
 ### `LICENSE`
 Apache-2.0 license.
 
@@ -278,8 +273,17 @@ Reasoning detection: causal connectives, decision verbs, contrastive markers, AD
 ### `src/arc/refinement.py`
 Post-retrieval refinement: task-aware mode detection, raw chunk passthrough lane, code/docs classification, claim extraction on docs, reasoning boost, code minimum guarantee, token budgeting, evidence map.
 
+### `src/arc/scope.py`
+Scope reduction for large repos: heuristic path/symbol/directory matching. `build_repo_metadata()` and `infer_scope()` — no ML, no embeddings.
+
+### `src/arc/retrieval_pipeline.py`
+Two-phase scoped retrieval: scope reduction → hybrid scoring on scoped chunks → ARC refine. `ScopedRetrievalPipeline` orchestrator for 100k+ LOC repos.
+
+### `src/arc/cache.py`
+File-system cache for chunking and embedding artifacts. Content-addressed by source directory hash. Off by default.
+
 ### `src/arc/config.py`
-Named constants: stop words, builder defaults, loader thresholds.
+Named constants: stop words, builder defaults, loader thresholds, scoped retrieval limits.
 
 ### `src/arc/diff.py`
 Structural and semantic diff between two archives.
@@ -294,14 +298,20 @@ PEP 561 marker — indicates the package ships inline type annotations.
 
 ## Large-Repo Benchmark
 
-### `eval/large_repo_tasks/REPO_CONFIG.json`
+### `eval/large_repo_tasks/fastapi/REPO_CONFIG.json`
 FastAPI snapshot config: repo URL, pinned SHA, exclude patterns.
 
-### `eval/large_repo_tasks/tasks.json`
-30 benchmark tasks (6 categories x 5) with ground truth answers, keywords, required facts.
+### `eval/large_repo_tasks/fastapi/tasks.json`
+30 FastAPI benchmark tasks (6 categories x 5) with ground truth answers, keywords, required facts.
 
-### `eval/large_repo_tasks/README.md`
-Task design rationale, category definitions, authoring methodology.
+### `eval/large_repo_tasks/fastapi/README.md`
+FastAPI task design rationale, category definitions, authoring methodology.
+
+### `eval/large_repo_tasks/django/REPO_CONFIG.json`
+Django snapshot config: repo URL, tag 5.1, exclude patterns (~300K LOC).
+
+### `eval/large_repo_tasks/django/tasks.json`
+30 Django benchmark tasks (6 categories x 5) — ORM, middleware, templates, auth, admin, security.
 
 ### `eval/baselines/__init__.py`
 Package exports for baseline retrieval systems.
@@ -321,11 +331,14 @@ Baseline C (critical ablation): Hybrid chunk retrieval — vector + keyword + he
 ### `eval/baselines/hybrid_refined.py`
 Baseline E: Hybrid + ARC post-retrieval refinement — fetches 30 chunks via hybrid scoring, refines with code/docs classification, claim extraction, token budgeting.
 
+### `eval/baselines/scoped_refined.py`
+Baseline F (EXPERIMENTAL): Scoped + ARC refinement — two-phase retrieval with scope reduction. Works on small repos (<30K LOC), fails at scale (Django recall 0.242). Use HybridRefinedRetriever instead.
+
 ### `scripts/setup_fastapi_snapshot.py`
-Clones and freezes FastAPI at pinned version for benchmarking.
+Clones and freezes a repository at pinned version for benchmarking. Accepts `--config` for repo-agnostic setup (default: FastAPI). Works for any repo via config.
 
 ### `scripts/run_large_repo_benchmark.py`
-Main runner: ARC vs 4 baselines on 30 tasks. Modes: smoke/full/ragas.
+Main runner: ARC vs 5 baselines (+ scoped_arc) on tasks. Accepts `--repo` (fastapi, django). Modes: smoke/full/ragas.
 
 ### `docs/current-eval-audit.md`
 Audit of existing evaluation: what exists and what the large-repo benchmark adds.
@@ -357,14 +370,26 @@ Honest positioning memo: what ARC is/isn't, where it wins/loses vs hybrid, bench
 ### `docs/demo_arc_v2.md`
 Side-by-side demo of hybrid vs hybrid_arc output on 3 representative tasks.
 
-### `reports/large-repo-summary.md`
-Full benchmark results with analysis: system comparison, per-category breakdown, effect sizes, root cause diagnosis.
+### `docs/large_repo_scaling_plan.md`
+Scaling plan for 100k+ LOC repos: scoped two-phase retrieval architecture, candidate repos, success criteria, failure modes.
 
-### `reports/large-repo-results.json`
-Per-task detail: all 120 evaluations (30 tasks × 4 systems) with individual scores.
+### `docs/large_repo_positioning.md`
+Honest assessment of where scoped ARC will and won't work at scale. Includes Django benchmark results showing scoped_arc failure. Assumptions, failure modes, non-claims.
+
+### `docs/benchmark-fastapi-vs-django.md`
+Polished comparison report: hybrid_arc across FastAPI (15K LOC) and Django (155K LOC). System tables, per-category analysis, cross-file bottleneck diagnosis, scoped_arc assessment, product recommendation.
+
+### `docs/demo-django.md`
+5-step reproduction for Django benchmark. Setup, smoke test, full run, interpretation guide. Approximate timings and expected outputs.
+
+### `reports/large-repo-summary-{repo}.md`
+Full benchmark results with analysis: system comparison, per-category breakdown, effect sizes, root cause diagnosis. Per-repo (fastapi, django).
+
+### `reports/large-repo-results-{repo}.json`
+Per-task detail with individual scores. Per-repo (fastapi, django).
 
 ### `Makefile`
-Targets: test, lint, benchmark-setup, benchmark-smoke, benchmark-full, benchmark-ragas, clean.
+Targets: test, lint, benchmark-setup, benchmark-setup-django, benchmark-smoke, benchmark-smoke-django, benchmark-full, benchmark-full-django, benchmark-ragas, clean.
 
 ---
 
@@ -384,7 +409,7 @@ factual entailment, contradiction detection, selective loading efficiency.
 ### `tests/test_ragas_eval.py`
 **Primary evaluation.** Real RAGAS metrics using Claude as LLM judge.
 Context precision, recall, faithfulness, response relevancy — all semantically evaluated.
-Requires `pip install arc-archive[eval]` + `ANTHROPIC_API_KEY`.
+Requires `pip install arc-context[eval]` + `ANTHROPIC_API_KEY`.
 
 ### `tests/test_retrieval_metrics.py`
 CI smoke tests: keyword-based context precision, recall, faithfulness, term coverage.

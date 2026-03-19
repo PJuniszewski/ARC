@@ -1,4 +1,4 @@
-"""ARC Archive — Portable, verifiable, semantic archives for AI agents."""
+"""ARC (Agent Reasoning Context) — portable, verifiable context packaging for AI agents."""
 
 import logging
 

@@ -9,7 +9,7 @@ matching, RAGAS evaluates semantic understanding: can the LLM judge confirm
 that retrieved context actually answers the question?
 
 Requires:
-    pip install arc-archive[eval]
+    pip install arc-context[eval]
     ANTHROPIC_API_KEY environment variable
 
 Metrics:
@@ -65,7 +65,7 @@ except ImportError:
 
 def _require_ragas():
     if not HAS_RAGAS:
-        pytest.skip("ragas not installed (pip install arc-archive[eval])")
+        pytest.skip("ragas not installed (pip install arc-context[eval])")
     if not HAS_METRICS:
         pytest.skip("ragas metrics not available — check ragas version")
 

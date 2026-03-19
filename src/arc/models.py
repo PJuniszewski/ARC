@@ -1,4 +1,4 @@
-"""Data models for ARC Archive — Resource, TextUnit, Claim, Decision, Layer, Manifest."""
+"""Data models for ARC — Resource, TextUnit, Claim, Decision, Layer, Manifest."""
 
 from __future__ import annotations
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Large-repo benchmark: ARC vs baselines on FastAPI.
+"""Large-repo benchmark: ARC vs baselines on a target repository.
 
-Compares 4 retrieval systems on 30 tasks across 6 categories.
+Compares 6 retrieval systems on tasks across 6 categories.
 Produces lexical metrics (free), and optionally RAGAS LLM-judged metrics.
 
 Usage:
-    python scripts/run_large_repo_benchmark.py --mode=smoke     # 5 tasks, lexical
-    python scripts/run_large_repo_benchmark.py --mode=full      # 30 tasks, lexical
-    ANTHROPIC_API_KEY=... python scripts/run_large_repo_benchmark.py --mode=ragas
+    python scripts/run_large_repo_benchmark.py --mode=smoke --repo=fastapi
+    python scripts/run_large_repo_benchmark.py --mode=full --repo=django
+    ANTHROPIC_API_KEY=... python scripts/run_large_repo_benchmark.py --mode=ragas --repo=fastapi
 """
 
 from __future__ import annotations
@@ -37,15 +37,24 @@ from eval.baselines.tfidf_baseline import TfidfChunkRetriever  # noqa: E402
 from eval.baselines.vector_baseline import VectorChunkRetriever  # noqa: E402
 from eval.baselines.hybrid_baseline import HybridChunkRetriever  # noqa: E402
 from eval.baselines.hybrid_refined import HybridRefinedRetriever  # noqa: E402
+from eval.baselines.scoped_refined import ScopedRefinedRetriever  # noqa: E402
 
 # ── Paths ─────────────────────────────────────────────────────────
 
-REPO_CONFIG_PATH = PROJECT_ROOT / "eval" / "large_repo_tasks" / "REPO_CONFIG.json"
-TASKS_PATH = PROJECT_ROOT / "eval" / "large_repo_tasks" / "tasks.json"
-SNAPSHOT_DIR = PROJECT_ROOT / "eval" / "large_repo_data" / "fastapi"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
+
+def _repo_paths(repo_name: str) -> tuple[Path, Path, Path]:
+    """Derive config, tasks, and snapshot paths from repo name."""
+    tasks_dir = PROJECT_ROOT / "eval" / "large_repo_tasks" / repo_name
+    config_path = tasks_dir / "REPO_CONFIG.json"
+    tasks_path = tasks_dir / "tasks.json"
+    config = json.loads(config_path.read_text())
+    snapshot_dir = PROJECT_ROOT / config["snapshot_dir"]
+    return config_path, tasks_path, snapshot_dir
+
 SYSTEM_NAMES = ["tfidf", "vector", "hybrid", "arc", "hybrid_arc"]
+# scoped_arc available via --systems scoped_arc but not in default runs
 
 # ── Metric Functions ──────────────────────────────────────────────
 
@@ -235,7 +244,7 @@ def score_result(
 class ArcRetriever:
     """Full ARC pipeline: build_archive -> load(task=question)."""
 
-    def __init__(self, source_dir: Path, archive_dir: Path):
+    def __init__(self, source_dir: Path, archive_dir: Path, repo_name: str = "fastapi"):
         # Scale up loader limits for large archives (default 12/8 tuned for small)
         import arc.config as arc_config
         arc_config.MAX_FILTERED_CLAIMS = 50
@@ -245,7 +254,7 @@ class ArcRetriever:
         self.result = build_archive(
             source_dir=source_dir,
             output_dir=archive_dir,
-            archive_id="arc://benchmark/fastapi",
+            archive_id=f"arc://benchmark/{repo_name}",
         )
         assert self.result.valid, f"ARC build failed: {self.result.errors}"
         self.archive_path = archive_dir
@@ -290,7 +299,7 @@ def _score_ragas(scores: list[TaskScore], tasks: list[dict], results_by_task: di
     try:
         from ragas.llms import llm_factory
     except ImportError:
-        print("ERROR: ragas not installed. Run: pip install arc-archive[eval]")
+        print("ERROR: ragas not installed. Run: pip install arc-context[eval]")
         return
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -379,7 +388,7 @@ def _score_ragas(scores: list[TaskScore], tasks: list[dict], results_by_task: di
 # ── Report Generation ─────────────────────────────────────────────
 
 
-def _generate_report(scores: list[TaskScore], mode: str) -> tuple[dict, str]:
+def _generate_report(scores: list[TaskScore], mode: str, repo_name: str = "fastapi") -> tuple[dict, str]:
     """Generate JSON report and markdown summary."""
     # Group by system
     by_system: dict[str, list[TaskScore]] = {}
@@ -458,6 +467,20 @@ def _generate_report(scores: list[TaskScore], mode: str) -> tuple[dict, str]:
                 base_xf = [s.context_recall for s in by_system[baseline] if s.requires_cross_file]
                 effect_sizes[f"hybrid_arc_vs_{baseline}_crossfile"] = cohens_d(base_xf, harc_xf)
 
+    # Effect sizes: scoped_arc vs each baseline
+    if "scoped_arc" in by_system:
+        sarc_recalls = [s.context_recall for s in by_system["scoped_arc"]]
+        for baseline in ["tfidf", "vector", "hybrid", "arc", "hybrid_arc"]:
+            if baseline in by_system:
+                base_recalls = [s.context_recall for s in by_system[baseline]]
+                effect_sizes[f"scoped_arc_vs_{baseline}_recall"] = cohens_d(base_recalls, sarc_recalls)
+        # Cross-file subset
+        sarc_xf = [s.context_recall for s in by_system["scoped_arc"] if s.requires_cross_file]
+        for baseline in ["tfidf", "vector", "hybrid", "arc", "hybrid_arc"]:
+            if baseline in by_system:
+                base_xf = [s.context_recall for s in by_system[baseline] if s.requires_cross_file]
+                effect_sizes[f"scoped_arc_vs_{baseline}_crossfile"] = cohens_d(base_xf, sarc_xf)
+
     report = {
         "metadata": {
             "mode": mode,
@@ -471,15 +494,16 @@ def _generate_report(scores: list[TaskScore], mode: str) -> tuple[dict, str]:
     }
 
     # Markdown summary
-    md = _generate_markdown(system_means, category_means, effect_sizes, mode)
+    md = _generate_markdown(system_means, category_means, effect_sizes, mode, repo_name=repo_name)
     return report, md
 
 
 def _generate_markdown(
     system_means: dict, category_means: dict, effect_sizes: dict, mode: str,
+    repo_name: str = "fastapi",
 ) -> str:
     lines = [
-        "# Large-Repo Benchmark Results",
+        f"# Large-Repo Benchmark Results: {repo_name}",
         "",
         f"**Mode**: {mode}",
         f"**Systems**: {', '.join(system_means.keys())}",
@@ -555,11 +579,15 @@ def _generate_markdown(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Large-repo benchmark: ARC vs baselines on FastAPI"
+        description="Large-repo benchmark: ARC vs baselines"
     )
     parser.add_argument(
         "--mode", choices=["smoke", "full", "ragas"], default="smoke",
         help="smoke=5 tasks lexical, full=30 tasks lexical, ragas=30 tasks + LLM judge",
+    )
+    parser.add_argument(
+        "--repo", default="fastapi",
+        help="Repository to benchmark (e.g., fastapi, django)",
     )
     parser.add_argument(
         "--systems", nargs="+", default=SYSTEM_NAMES,
@@ -575,19 +603,22 @@ def main():
     )
     args = parser.parse_args()
 
+    repo_config_path, tasks_path, snapshot_dir = _repo_paths(args.repo)
+
     # 1. Ensure snapshot exists
-    if not SNAPSHOT_DIR.exists():
-        print("FastAPI snapshot not found. Running setup...")
+    if not snapshot_dir.exists():
+        print(f"{args.repo} snapshot not found. Running setup...")
         subprocess.run(
-            [sys.executable, str(PROJECT_ROOT / "scripts" / "setup_fastapi_snapshot.py")],
+            [sys.executable, str(PROJECT_ROOT / "scripts" / "setup_fastapi_snapshot.py"),
+             "--config", str(repo_config_path)],
             check=True,
         )
-    if not SNAPSHOT_DIR.exists():
+    if not snapshot_dir.exists():
         print("ERROR: Snapshot setup failed")
         sys.exit(1)
 
     # 2. Load tasks
-    tasks_data = json.loads(TASKS_PATH.read_text())
+    tasks_data = json.loads(tasks_path.read_text())
     tasks = tasks_data["tasks"]
     if args.mode == "smoke":
         tasks = [t for t in tasks if t.get("smoke_task")]
@@ -606,25 +637,29 @@ def main():
 
     if "tfidf" in args.systems:
         print("  [A] TF-IDF chunks...")
-        systems["tfidf"] = TfidfChunkRetriever(SNAPSHOT_DIR)
+        systems["tfidf"] = TfidfChunkRetriever(snapshot_dir)
 
     if "vector" in args.systems:
         print("  [B] Vector chunks...")
-        systems["vector"] = VectorChunkRetriever(SNAPSHOT_DIR)
+        systems["vector"] = VectorChunkRetriever(snapshot_dir)
 
     if "hybrid" in args.systems:
         print("  [C] Hybrid chunks...")
-        systems["hybrid"] = HybridChunkRetriever(SNAPSHOT_DIR)
+        systems["hybrid"] = HybridChunkRetriever(snapshot_dir)
 
     if "arc" in args.systems:
         print("  [D] Full ARC...")
-        arc_dir = REPORTS_DIR / "fastapi.arc"
+        arc_dir = REPORTS_DIR / f"{args.repo}.arc"
         arc_dir.mkdir(parents=True, exist_ok=True)
-        systems["arc"] = ArcRetriever(SNAPSHOT_DIR, arc_dir)
+        systems["arc"] = ArcRetriever(snapshot_dir, arc_dir, repo_name=args.repo)
 
     if "hybrid_arc" in args.systems:
         print("  [E] Hybrid + ARC refinement...")
-        systems["hybrid_arc"] = HybridRefinedRetriever(SNAPSHOT_DIR, retrieval_k=30)
+        systems["hybrid_arc"] = HybridRefinedRetriever(snapshot_dir, retrieval_k=30)
+
+    if "scoped_arc" in args.systems:
+        print("  [F] Scoped + ARC refinement...")
+        systems["scoped_arc"] = ScopedRefinedRetriever(snapshot_dir)
 
     build_time = time.time() - t0
     print(f"  Index build time: {build_time:.1f}s")
@@ -650,13 +685,14 @@ def main():
     # 6. Generate reports
     print("\nGenerating reports...")
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    report, md = _generate_report(all_scores, args.mode)
+    report, md = _generate_report(all_scores, args.mode, repo_name=args.repo)
     report["metadata"]["build_time_seconds"] = round(build_time, 1)
+    report["metadata"]["repo"] = args.repo
 
-    json_path = REPORTS_DIR / "large-repo-results.json"
+    json_path = REPORTS_DIR / f"large-repo-results-{args.repo}.json"
     json_path.write_text(json.dumps(report, indent=2))
 
-    md_path = REPORTS_DIR / "large-repo-summary.md"
+    md_path = REPORTS_DIR / f"large-repo-summary-{args.repo}.md"
     md_path.write_text(md)
 
     print("\nResults written to:")

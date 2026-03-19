@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "arc-archive"
+name = "arc-context"
 version = "1.0.0"
-description = "Portable, verifiable, semantic archives for AI agents"
+description = "ARC (Agent Reasoning Context) — portable, verifiable context packaging for AI agents"
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,24 +15,23 @@ authors = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/PJuniszewski/agent-archive"
 Repository = "https://github.com/PJuniszewski/agent-archive"
 Issues = "https://github.com/PJuniszewski/agent-archive/issues"
-Changelog = "https://github.com/PJuniszewski/agent-archive/blob/prod/CHANGELOG.md"
-
-dependencies = [
-    "numpy>=1.24",
-]
 
 [project.optional-dependencies]
 ml = [
@@ -65,7 +64,7 @@ testpaths = ["tests"]
 markers = [
     "ml: tests requiring ML dependencies (sentence-transformers, bert-score)",
     "llm: tests requiring LLM judge (anthropic SDK + ANTHROPIC_API_KEY)",
-    "eval: tests requiring RAGAS evaluation (pip install arc-archive[eval] + ANTHROPIC_API_KEY)",
+    "eval: tests requiring RAGAS evaluation (pip install arc-context[eval] + ANTHROPIC_API_KEY)",
 ]
 
 [tool.ruff]

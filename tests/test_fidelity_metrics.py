@@ -1,7 +1,7 @@
 """Fidelity metrics — claim preservation and factual consistency.
 
 Two tiers:
-- BERTScore (real semantic similarity) — requires `pip install arc-archive[ml]`,
+- BERTScore (real semantic similarity) — requires `pip install arc-context[ml]`,
   marked @pytest.mark.ml, excluded from default CI. Only runs when bert-score is
   installed. This is the only test that uses actual BERTScore.
 - N-gram overlap and term-level entailment — lexical proxies that run without
@@ -185,11 +185,11 @@ class TestBERTScoreFidelity:
         2. For each claim, compute BERTScore against its source text unit
         3. Assert mean F1 > 0.80
 
-        Requires: pip install arc-archive[ml]
+        Requires: pip install arc-context[ml]
         """
         bert_score_fn = _try_bertscore()
         if bert_score_fn is None:
-            pytest.skip("bert-score not installed (pip install arc-archive[ml])")
+            pytest.skip("bert-score not installed (pip install arc-context[ml])")
 
         archive_path = tmp_path / "bert_fidelity.arc"
         result = build_archive(corpus_dir, archive_path)

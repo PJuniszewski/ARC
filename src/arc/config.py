@@ -1,4 +1,4 @@
-"""Configuration constants for ARC Archive loader and builder."""
+"""Configuration constants for ARC loader and builder."""
 
 # --- Selective loading thresholds ---
 
