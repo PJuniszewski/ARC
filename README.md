@@ -1,7 +1,7 @@
 # ARC - Agent Reasoning Context
 
 [![CI](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml/badge.svg)](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml)
-[![PyPI](https://img.shields.io/pypi/v/arc-context?label=pypi&color=blue)](https://pypi.org/project/arc-context/)
+[![PyPI](https://img.shields.io/pypi/v/arc-context)](https://pypi.org/project/arc-context/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 <!-- COVERAGE-BADGE-START -->
