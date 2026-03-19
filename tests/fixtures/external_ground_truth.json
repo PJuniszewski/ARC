@@ -1,0 +1,60 @@
+{
+  "aider": {
+    "single_hop_questions": [
+      {
+        "question": "What Python version does the project require?",
+        "answer": "Python 3.10+ with type hints",
+        "relevant_keywords": ["python", "3.10", "type hints"]
+      },
+      {
+        "question": "What linter and formatter does the project use?",
+        "answer": "The project uses ruff for linting and formatting",
+        "relevant_keywords": ["ruff", "linting", "formatting"]
+      },
+      {
+        "question": "What is the maximum line length allowed?",
+        "answer": "Maximum line length is 100 characters",
+        "relevant_keywords": ["100", "line length", "characters"]
+      },
+      {
+        "question": "What test framework is used and what is the coverage target?",
+        "answer": "pytest is used for all tests with coverage above 80%",
+        "relevant_keywords": ["pytest", "coverage", "80"]
+      },
+      {
+        "question": "What are the git branch naming conventions?",
+        "answer": "Branch names follow the pattern type/short-description",
+        "relevant_keywords": ["branch", "type/short-description", "pattern"]
+      }
+    ]
+  },
+  "crewai": {
+    "single_hop_questions": [
+      {
+        "question": "How many agents does the CrewAI pipeline use?",
+        "answer": "The pipeline uses three agents: researcher, writer, and reviewer",
+        "relevant_keywords": ["three", "researcher", "writer", "reviewer"]
+      },
+      {
+        "question": "What tools does the researcher agent have access to?",
+        "answer": "The researcher agent has web_search and document_reader tools",
+        "relevant_keywords": ["web_search", "document_reader", "researcher"]
+      },
+      {
+        "question": "What is the maximum number of iterations for the writer agent?",
+        "answer": "The writer agent has max_iterations of 3",
+        "relevant_keywords": ["writer", "max_iterations", "3"]
+      },
+      {
+        "question": "Why was a sequential pipeline chosen over parallel?",
+        "answer": "Each stage depends on the output of the previous stage and sequential is simpler to debug",
+        "relevant_keywords": ["sequential", "depends", "debug", "audit"]
+      },
+      {
+        "question": "What does the review task output include?",
+        "answer": "A review report with quality score 1-10, issues found, corrections, and recommendation to publish revise or reject",
+        "relevant_keywords": ["quality score", "1-10", "publish", "revise", "reject"]
+      }
+    ]
+  }
+}

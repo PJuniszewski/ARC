@@ -1,0 +1,9 @@
+{
+  "repo_url": "https://github.com/django/django.git",
+  "tag": "5.1",
+  "sha": "",
+  "exclude_dirs": ["tests", "docs", "js_tests", "extras", "scripts", ".tx", ".github"],
+  "snapshot_dir": "eval/large_repo_data/django",
+  "description": "Django ~300K LOC Python — ORM, URL routing, middleware, template engine, auth, admin",
+  "rationale": "Large repo with clear directory boundaries, tests scoped retrieval at 20x FastAPI scale"
+}

@@ -1,0 +1,16 @@
+## Aider configuration
+
+model: claude-sonnet-4-20250514
+edit-format: diff
+auto-commits: true
+dirty-commits: true
+lint-cmd: ruff check --fix
+auto-lint: true
+map-tokens: 1024
+stream: true
+dark-mode: true
+
+## File patterns
+read:
+  - CONVENTIONS.md
+  - README.md

@@ -1,0 +1,274 @@
+{
+  "tasks": [
+    {
+      "id": "cc-01",
+      "agent": "claude-code",
+      "category": "factual_recall",
+      "question": "What are the five layers of the ARC system model?",
+      "expected_facts": ["five layers", "Source", "Builder", "Artifact", "Loader", "Runtime"],
+      "relevant_sources": ["memory/architecture.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-02",
+      "agent": "claude-code",
+      "category": "config_lookup",
+      "question": "What is the session start protocol for this project?",
+      "expected_facts": ["MEMORY.md", "active.md", "CLAUDE.md", "routing table"],
+      "relevant_sources": ["CLAUDE.md", "claude-commands/start-session.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-03",
+      "agent": "claude-code",
+      "category": "convention_check",
+      "question": "What design biases should be preferred when making tradeoffs?",
+      "expected_facts": ["claim", "evidence", "immutable blobs", "explicit manifests", "local-first", "narrow v0"],
+      "relevant_sources": ["CLAUDE.md", "memory/architecture.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-04",
+      "agent": "claude-code",
+      "category": "decision_retrieval",
+      "question": "Why must MEMORY.md and INDEX.md be kept as separate files?",
+      "expected_facts": ["mutable state", "stable structure", "update conflicts", "separate concerns"],
+      "relevant_sources": ["memory/architecture.md", "memory/gotchas.md", "CLAUDE.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-05",
+      "agent": "claude-code",
+      "category": "multi_hop_reasoning",
+      "question": "How does the three-layer memory architecture prevent context pollution?",
+      "expected_facts": ["routing table", "progressive disclosure", "two hops", "topic files", "context pollution"],
+      "relevant_sources": ["memory/architecture.md", "memory/gotchas.md", "memory/research.md"],
+      "difficulty": "multi-hop"
+    },
+    {
+      "id": "cc-06",
+      "agent": "claude-code",
+      "category": "factual_recall",
+      "question": "What are the four semantic payload types in the ARC format?",
+      "expected_facts": ["SourceUnit", "Claim", "Decision", "EvidencePointer"],
+      "relevant_sources": ["memory/spec-knowledge.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-07",
+      "agent": "claude-code",
+      "category": "convention_check",
+      "question": "When should a new ADR be created or updated?",
+      "expected_facts": ["archive layout", "manifest semantics", "trust model", "execution model", "transport"],
+      "relevant_sources": ["CLAUDE.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-08",
+      "agent": "claude-code",
+      "category": "decision_retrieval",
+      "question": "Why was artifact-first chosen over runtime-memory-first design?",
+      "expected_facts": ["portability", "verifiability", "artifact-first", "durable"],
+      "relevant_sources": ["memory/architecture.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-09",
+      "agent": "claude-code",
+      "category": "config_lookup",
+      "question": "What CLI commands does the ARC tool define?",
+      "expected_facts": ["build", "inspect", "verify", "load", "diff"],
+      "relevant_sources": ["memory/spec-knowledge.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cc-10",
+      "agent": "claude-code",
+      "category": "multi_hop_reasoning",
+      "question": "How do content-addressed blobs support both tamper detection and incremental updates?",
+      "expected_facts": ["SHA-256", "digest", "immutable", "deduplication", "tamper detection"],
+      "relevant_sources": ["memory/architecture.md", "memory/spec-knowledge.md"],
+      "difficulty": "multi-hop"
+    },
+    {
+      "id": "ai-01",
+      "agent": "aider",
+      "category": "config_lookup",
+      "question": "What model and edit format does Aider use in this project?",
+      "expected_facts": ["claude-sonnet-4-20250514", "diff"],
+      "relevant_sources": [".aider.conf.yml"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-02",
+      "agent": "aider",
+      "category": "config_lookup",
+      "question": "What lint command is configured for automatic linting?",
+      "expected_facts": ["ruff", "lint", "auto-lint"],
+      "relevant_sources": [".aider.conf.yml", "CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-03",
+      "agent": "aider",
+      "category": "convention_check",
+      "question": "What is the maximum line length and what tool enforces it?",
+      "expected_facts": ["100 characters", "ruff"],
+      "relevant_sources": ["CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-04",
+      "agent": "aider",
+      "category": "convention_check",
+      "question": "What testing framework is used and what is the coverage threshold?",
+      "expected_facts": ["pytest", "80%", "independent"],
+      "relevant_sources": ["CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-05",
+      "agent": "aider",
+      "category": "factual_recall",
+      "question": "What are the architecture principles for this project?",
+      "expected_facts": ["composition over inheritance", "300 lines", "dependency injection", "boundary"],
+      "relevant_sources": ["CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-06",
+      "agent": "aider",
+      "category": "decision_retrieval",
+      "question": "How was the auth module refactored and why?",
+      "expected_facts": ["dependency injection", "TokenVerifier", "protocol class"],
+      "relevant_sources": [".aider.chat.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-07",
+      "agent": "aider",
+      "category": "multi_hop_reasoning",
+      "question": "How do the coding conventions connect to the auth module refactoring?",
+      "expected_facts": ["dependency injection", "TokenVerifier", "boundary"],
+      "relevant_sources": ["CONVENTIONS.md", ".aider.chat.md"],
+      "difficulty": "multi-hop"
+    },
+    {
+      "id": "ai-08",
+      "agent": "aider",
+      "category": "config_lookup",
+      "question": "What are the rate limiting configuration details?",
+      "expected_facts": ["100 requests per minute", "sliding window", "Redis", "429", "Retry-After"],
+      "relevant_sources": [".aider.chat.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-09",
+      "agent": "aider",
+      "category": "convention_check",
+      "question": "What are the git workflow conventions?",
+      "expected_facts": ["atomic", "type/short-description", "approval"],
+      "relevant_sources": ["CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "ai-10",
+      "agent": "aider",
+      "category": "convention_check",
+      "question": "What security practices are required?",
+      "expected_facts": ["never commit secrets", "validate", "parameterized queries"],
+      "relevant_sources": ["CONVENTIONS.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-01",
+      "agent": "crewai",
+      "category": "factual_recall",
+      "question": "What are the three agents in the content pipeline?",
+      "expected_facts": ["researcher", "writer", "reviewer"],
+      "relevant_sources": ["agents.yaml", "README.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-02",
+      "agent": "crewai",
+      "category": "config_lookup",
+      "question": "What tools does the researcher agent have access to?",
+      "expected_facts": ["web_search", "document_reader"],
+      "relevant_sources": ["agents.yaml"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-03",
+      "agent": "crewai",
+      "category": "config_lookup",
+      "question": "What are the max iterations configured for each agent?",
+      "expected_facts": ["max_iterations", "5", "3", "2"],
+      "relevant_sources": ["agents.yaml"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-04",
+      "agent": "crewai",
+      "category": "factual_recall",
+      "question": "What is the expected output of the research task?",
+      "expected_facts": ["executive summary", "key findings", "source list", "gaps"],
+      "relevant_sources": ["tasks.yaml"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-05",
+      "agent": "crewai",
+      "category": "convention_check",
+      "question": "What are the content quality rules for the pipeline?",
+      "expected_facts": ["cite sources", "veto power", "3 independent sources", "tested"],
+      "relevant_sources": ["README.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-06",
+      "agent": "crewai",
+      "category": "decision_retrieval",
+      "question": "Why was a sequential pipeline chosen over parallel execution?",
+      "expected_facts": ["depends on the output of the previous stage", "simpler to debug", "quality gate"],
+      "relevant_sources": ["README.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-07",
+      "agent": "crewai",
+      "category": "multi_hop_reasoning",
+      "question": "How does the reviewer configuration connect to content quality guarantees?",
+      "expected_facts": ["reviewer", "veto power", "depends_on", "accuracy"],
+      "relevant_sources": ["agents.yaml", "tasks.yaml", "README.md"],
+      "difficulty": "multi-hop"
+    },
+    {
+      "id": "cr-08",
+      "agent": "crewai",
+      "category": "factual_recall",
+      "question": "What must the review task check in submitted content?",
+      "expected_facts": ["accuracy", "clarity", "code examples", "unsupported assertions"],
+      "relevant_sources": ["tasks.yaml"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-09",
+      "agent": "crewai",
+      "category": "config_lookup",
+      "question": "How do you run the CrewAI content pipeline?",
+      "expected_facts": ["crewai run", "agents.yaml", "tasks.yaml", "topic"],
+      "relevant_sources": ["README.md"],
+      "difficulty": "single-hop"
+    },
+    {
+      "id": "cr-10",
+      "agent": "crewai",
+      "category": "decision_retrieval",
+      "question": "What are the consequences of the sequential pipeline design?",
+      "expected_facts": ["sum of all stages", "no parallelism", "must re-run"],
+      "relevant_sources": ["README.md"],
+      "difficulty": "single-hop"
+    }
+  ]
+}

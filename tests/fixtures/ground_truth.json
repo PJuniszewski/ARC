@@ -1,0 +1,184 @@
+{
+  "single_hop_questions": [
+    {
+      "question": "What hash algorithm does ARC use for content addressing?",
+      "answer": "SHA-256",
+      "relevant_docs": ["architecture.md", "format-spec.md", "adr-001-content-addressing.md"],
+      "relevant_keywords": ["SHA-256", "content-addressed", "hash", "digest"]
+    },
+    {
+      "question": "What are the four primary threat categories in ARC's security model?",
+      "answer": "Prompt injection, archive poisoning, rollback attacks, and stale context",
+      "relevant_docs": ["security.md"],
+      "relevant_keywords": ["prompt injection", "poisoning", "rollback", "stale", "threat"]
+    },
+    {
+      "question": "How many stages does the builder pipeline have?",
+      "answer": "Eight stages",
+      "relevant_docs": ["builder-pipeline.md"],
+      "relevant_keywords": ["eight", "stages", "pipeline", "builder"]
+    },
+    {
+      "question": "What embedding model dimensions does the TF-IDF fallback use?",
+      "answer": "256 dimensions",
+      "relevant_docs": ["embeddings.md"],
+      "relevant_keywords": ["TF-IDF", "256", "dimensions", "embedding"]
+    },
+    {
+      "question": "What are the three archive classes defined in the format spec?",
+      "answer": "Minimal, Standard, and Extended",
+      "relevant_docs": ["format-spec.md"],
+      "relevant_keywords": ["Minimal", "Standard", "Extended", "archive", "classes"]
+    },
+    {
+      "question": "How many layers does the ARC system architecture have?",
+      "answer": "Five layers",
+      "relevant_docs": ["architecture.md"],
+      "relevant_keywords": ["five", "layer", "architecture", "source", "builder", "artifact", "loader", "runtime"]
+    },
+    {
+      "question": "What are the four possible statuses for a decision in the claims model?",
+      "answer": "Proposed, accepted, superseded, and rejected",
+      "relevant_docs": ["claims-model.md"],
+      "relevant_keywords": ["proposed", "accepted", "superseded", "rejected", "decision", "status"]
+    },
+    {
+      "question": "What alternative embedding model is used when sentence-transformers is available?",
+      "answer": "all-MiniLM-L6-v2",
+      "relevant_docs": ["embeddings.md"],
+      "relevant_keywords": ["MiniLM", "sentence-transformers", "embedding", "model"]
+    },
+    {
+      "question": "What attestation model does ARC provenance follow?",
+      "answer": "In-toto conventions with predicates describing specific properties",
+      "relevant_docs": ["provenance.md"],
+      "relevant_keywords": ["in-toto", "attestation", "predicate", "provenance"]
+    },
+    {
+      "question": "What are the four trust boundaries in the ARC security model?",
+      "answer": "Source to Builder, Builder to Archive, Archive to Loader, and Loader to Runtime",
+      "relevant_docs": ["security.md"],
+      "relevant_keywords": ["trust", "boundary", "source", "builder", "archive", "loader", "runtime"]
+    },
+    {
+      "question": "What are the six required fields in an ARC manifest?",
+      "answer": "schema_version, archive_id, archive_version, created_at, root_digest, and layers",
+      "relevant_docs": ["format-spec.md"],
+      "relevant_keywords": ["schema_version", "archive_id", "archive_version", "created_at", "root_digest", "layers", "manifest"]
+    },
+    {
+      "question": "What happens if dependency cycles exist between archive layers?",
+      "answer": "Dependency cycles between layers are invalid",
+      "relevant_docs": ["format-spec.md"],
+      "relevant_keywords": ["dependency", "cycle", "invalid", "layer"]
+    },
+    {
+      "question": "What chunking method is used for Python source files?",
+      "answer": "Split by top-level definitions (functions and classes)",
+      "relevant_docs": ["builder-pipeline.md"],
+      "relevant_keywords": ["Python", "chunking", "top-level", "definitions", "function", "class"]
+    },
+    {
+      "question": "What are the four kinds of claims in the semantic model?",
+      "answer": "Fact, assertion, requirement, and definition",
+      "relevant_docs": ["claims-model.md"],
+      "relevant_keywords": ["fact", "assertion", "requirement", "definition", "kind", "claim"]
+    },
+    {
+      "question": "How does ARC prevent rollback attacks?",
+      "answer": "Through version tracking and minimum version enforcement",
+      "relevant_docs": ["security.md"],
+      "relevant_keywords": ["rollback", "version", "tracking", "minimum", "enforcement"]
+    },
+    {
+      "question": "What similarity measure does the embedding index use for search?",
+      "answer": "Cosine similarity",
+      "relevant_docs": ["embeddings.md"],
+      "relevant_keywords": ["cosine", "similarity", "embedding", "search"]
+    }
+  ],
+  "multi_hop_questions": [
+    {
+      "question": "How does content addressing enable both tamper detection and incremental updates?",
+      "required_facts": [
+        "Blobs are content-addressed using SHA-256",
+        "Any modification changes the digest",
+        "Incremental updates only store new or modified blobs",
+        "Manifest root digest covers all layer digests"
+      ],
+      "relevant_docs": ["architecture.md", "adr-001-content-addressing.md", "format-spec.md"]
+    },
+    {
+      "question": "How does selective loading reduce security risks while improving performance?",
+      "required_facts": [
+        "Selective loading mounts only task-relevant content",
+        "Reduces context pollution",
+        "Embedding similarity matches relevant claims",
+        "Security model treats source content as data not instructions",
+        "Loader verifies integrity before mounting"
+      ],
+      "relevant_docs": ["architecture.md", "adr-002-selective-loading.md", "security.md"]
+    },
+    {
+      "question": "How does the builder pipeline ensure provenance is maintained from source to archive?",
+      "required_facts": [
+        "Each TextUnit maintains provenance to its Resource",
+        "Evidence pointers link claims to source units",
+        "Builder records source inventory with digests",
+        "Provenance is stored as a blob in the archive",
+        "Builder must never silently drop provenance"
+      ],
+      "relevant_docs": ["builder-pipeline.md", "provenance.md", "claims-model.md"]
+    },
+    {
+      "question": "How do claims and evidence pointers work together with the trust chain?",
+      "required_facts": [
+        "Claims have evidence pointers to source units",
+        "Evidence pointers reference source unit IDs and line spans",
+        "Trust chain flows from source to consumer",
+        "Provenance records complete build chain",
+        "Each trust boundary requires explicit verification"
+      ],
+      "relevant_docs": ["claims-model.md", "provenance.md", "security.md"]
+    },
+    {
+      "question": "How do embeddings and the manifest work together to enable selective loading?",
+      "required_facts": [
+        "Embeddings are stored as a versioned layer in the archive",
+        "Manifest describes all layers with digests",
+        "Loader uses embedding similarity for task-based filtering",
+        "Cosine similarity scores rank claim relevance",
+        "Requirements and critical policies are always included"
+      ],
+      "relevant_docs": ["embeddings.md", "format-spec.md", "adr-002-selective-loading.md"]
+    },
+    {
+      "question": "How does the builder pipeline connect source files to verifiable claims?",
+      "required_facts": [
+        "Source files are ingested as Resources with digests",
+        "TextUnits maintain provenance to their Resource origin",
+        "Claims are extracted with evidence pointers to source units",
+        "All blobs are content-addressed with SHA-256",
+        "Validation checks that every evidence pointer references a valid source unit"
+      ],
+      "relevant_docs": ["builder-pipeline.md", "claims-model.md", "adr-001-content-addressing.md"]
+    }
+  ],
+  "expected_claims_per_doc": {
+    "architecture.md": ["five-layer architecture", "content-addressed", "SHA-256", "selective mounting", "security as core requirement"],
+    "security.md": ["prompt injection", "archive poisoning", "rollback attacks", "stale context", "trust boundaries"],
+    "builder-pipeline.md": ["eight sequential stages", "TextUnit", "provenance", "TF-IDF", "evidence pointer"],
+    "format-spec.md": ["manifest.json", "three archive classes", "SHA-256", "dependency cycles invalid"],
+    "claims-model.md": ["atomic assertion", "evidence pointer", "confidence score", "status", "traceability"]
+  },
+  "expected_decisions": [
+    {
+      "doc": "adr-001-content-addressing.md",
+      "title_contains": "Content Addressing"
+    },
+    {
+      "doc": "adr-002-selective-loading.md",
+      "title_contains": "Selective Loading"
+    }
+  ]
+}
