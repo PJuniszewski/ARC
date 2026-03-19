@@ -4,6 +4,9 @@ on:
   push:
     branches: [prod, main]
 
+permissions:
+  contents: write
+
 jobs:
   metrics:
     name: Test metrics & coverage
