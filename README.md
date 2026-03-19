@@ -2,8 +2,11 @@
 
 [![Tests](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml/badge.svg)](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml)
 [![Metrics](https://github.com/PJuniszewski/agent-archive/actions/workflows/metrics.yml/badge.svg)](https://github.com/PJuniszewski/agent-archive/actions/workflows/metrics.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Recall 0.91](https://img.shields.io/badge/recall-0.91-brightgreen)](docs/benchmark-fastapi-vs-django.md)
+[![Traceability 1.00](https://img.shields.io/badge/traceability-1.00-brightgreen)](docs/benchmark-fastapi-vs-django.md)
+[![Faithfulness 1.00](https://img.shields.io/badge/faithfulness-1.00-brightgreen)](docs/benchmark-fastapi-vs-django.md)
+[![Tamper Detection 100%](https://img.shields.io/badge/tamper_detection-100%25-brightgreen)](docs/benchmark-fastapi-vs-django.md)
 
 Portable, verifiable context packaging for AI agents.
 

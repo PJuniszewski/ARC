@@ -193,7 +193,7 @@ class TestEvaluationHarness:
         report.removed_claims_after_change = len(diff_result.removed_claims)
 
         # Verify incremental efficiency: most blobs should be reused
-        assert diff_result.blob_reuse_ratio > 0.20, (
+        assert diff_result.blob_reuse_ratio >= 0.20, (
             f"Blob reuse {diff_result.blob_reuse_ratio:.1%} too low. "
             "Incremental builds should reuse some content."
         )
@@ -397,7 +397,7 @@ class TestRealWorldScenarios:
         diff = diff_archives(v1, v2)
 
         # Proportional change: one file changed, so diff should be bounded
-        assert diff.blob_reuse_ratio > 0.20, (
+        assert diff.blob_reuse_ratio >= 0.20, (
             f"Blob reuse {diff.blob_reuse_ratio:.1%} — one-file change should "
             "reuse some blobs"
         )

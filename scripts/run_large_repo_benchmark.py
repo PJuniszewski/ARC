@@ -37,7 +37,7 @@ from eval.baselines.tfidf_baseline import TfidfChunkRetriever  # noqa: E402
 from eval.baselines.vector_baseline import VectorChunkRetriever  # noqa: E402
 from eval.baselines.hybrid_baseline import HybridChunkRetriever  # noqa: E402
 from eval.baselines.hybrid_refined import HybridRefinedRetriever  # noqa: E402
-from eval.baselines.scoped_refined import ScopedRefinedRetriever  # noqa: E402
+# scoped_refined is imported lazily — only needed when --systems includes scoped_arc
 
 # ── Paths ─────────────────────────────────────────────────────────
 
@@ -658,6 +658,7 @@ def main():
         systems["hybrid_arc"] = HybridRefinedRetriever(snapshot_dir, retrieval_k=30)
 
     if "scoped_arc" in args.systems:
+        from eval.baselines.scoped_refined import ScopedRefinedRetriever  # noqa: E402
         print("  [F] Scoped + ARC refinement...")
         systems["scoped_arc"] = ScopedRefinedRetriever(snapshot_dir)
 
