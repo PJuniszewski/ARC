@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: Ruff lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         run: ruff check src/ tests/ scripts/
 
   test:
-    name: Tests (py${{ matrix.python-version }})
+    name: Build · Load · Verify · Security (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: lint
     strategy:
