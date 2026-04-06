@@ -239,6 +239,11 @@ class TestInitCLI:
         assert "artifact" in data
         assert "top_claims" in data
         assert isinstance(data["top_claims"], list)
+        # source_file should be an actual path, not a truncated hash
+        for claim in data["top_claims"]:
+            sf = claim.get("source_file", "")
+            if sf:
+                assert "." in sf, f"source_file looks like a hash, not a path: {sf}"
 
     def test_init_json_parseable(self, tmp_path, capsys):
         """JSON output must be valid JSON (pipe test)."""
