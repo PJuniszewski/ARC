@@ -2,7 +2,7 @@
   <img src="assets/logo-dark.jpeg" alt="ARC — Agent Reasoning Context" width="480">
 </p>
 
-<h3 align="center">Verifiable context passing between AI agents</h3>
+<h3 align="center">Agents pass decisions with proof — down to the exact line of code.</h3>
 
 <p align="center">
   <a href="https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml"><img src="https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml/badge.svg" alt="CI"></a>
@@ -144,6 +144,12 @@ Source -> Builder -> .arc artifact -> Loader -> Agent runtime
 - **Snapshot**: lightweight subset for quick handoffs
 - **Merge**: combine parallel outputs, flag conflicting decisions
 
+**Extraction guarantees:**
+- **Deterministic** — same source produces identical claims and digests. No LLM in the extraction loop.
+- **Rule-based** — regex pattern matching + AST-aware chunking per language. No probabilistic extraction.
+- **Reproducible** — content-addressed storage means builds are verifiable. Rebuild from source, compare digests.
+- **Tamper-detected** — 100% detection rate on single-byte flips, blob deletion, manifest modification (tested exhaustively).
+
 ---
 
 ## CLI reference
@@ -198,6 +204,14 @@ Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs
 | [`docs/architecture.md`](docs/architecture.md) | 5-layer system model |
 
 ---
+
+## When to use ARC
+
+- **Multi-agent code review** — Agent A reviews, Agent B fixes. B sees A's decisions with evidence, not a vague summary.
+- **Debug multi-agent failures** — trace any agent's output back through the chain: this fix was made because of this decision, which was based on this line of code.
+- **Parallel agent work** — two agents review different aspects. Merge their artifacts. Conflicting decisions surface automatically.
+- **Audit trail for AI decisions** — "why did the agent change this file?" → load the `.arc`, filter to decisions, follow evidence pointers.
+- **Context handoff without token waste** — pass a 4KB `.arc` instead of pasting 50KB of raw files into the next agent's prompt.
 
 ## What ARC is not
 
