@@ -125,11 +125,16 @@ def build_archive(
     # === Stage 4b: LLM extraction (optional) ===
     if extract_with_llm:
         from .llm_extractor import extract_claims_with_llm
-        existing_ids = {c.derived_from for c in claims if c.derived_from}
+        # Only send chunks that lack high-confidence claims (>0.8) to LLM.
+        # Signature-only claims (0.7-0.8) indicate rule-based extraction was weak.
+        well_covered = set()
+        for c in claims:
+            if c.derived_from and c.confidence > 0.8:
+                well_covered.add(c.derived_from)
         _progress("3b/8", "LLM extraction...")
         llm_claims = extract_claims_with_llm(
-            text_units, resources, existing_ids,
-            confirm=on_progress is not None,  # interactive if progress callback
+            text_units, resources, well_covered,
+            confirm=on_progress is not None,
         )
         claims.extend(llm_claims)
         _progress("3b/8", f"LLM added {len(llm_claims)} claims")
