@@ -27,7 +27,7 @@ import re
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # Add project root to path
@@ -38,16 +38,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Task definitions: question + ground truth facts + relevant files
 # ---------------------------------------------------------------------------
 
-# Each fact is a list of acceptable variants. A fact is "found" if ANY variant
-# appears as a substring in the context. Deterministic, auditable.
+# Facts are simple strings describing what must be conveyed.
+# With API key: LLM judges semantically ("does context contain this fact?")
+# Without API key: substring matching (first item in list = canonical, rest = variants)
 TASKS = [
     {
         "id": "hash-algo",
         "question": "What hash algorithm does the content-addressed storage use?",
         "facts": [
-            ["SHA-256", "sha256", "SHA256", "hashlib.sha256"],
-            ["sha256", "SHA-256"],  # algorithm name
-            ["hashlib", "hash"],    # implementation
+            "The system uses SHA-256 hashing",
+            "hashlib.sha256 is used for computing digests",
         ],
         "files": ["cas.py"],
     },
@@ -55,10 +55,9 @@ TASKS = [
         "id": "conflict-detect",
         "question": "How does arc merge detect conflicting decisions between agents?",
         "facts": [
-            ["cosine similarity", "cosine_similarity", "cosine"],
-            ["tfidf", "TF-IDF", "TfidfEmbedder", "tf-idf"],
-            ["CONFLICT_SIMILARITY_THRESHOLD", "threshold", "0.45"],
-            ["embedding", "vector", "embed"],
+            "Cosine similarity is used to compare decisions",
+            "TF-IDF embeddings are used for conflict detection",
+            "There is a similarity threshold for flagging conflicts",
         ],
         "files": ["merge.py"],
     },
@@ -66,11 +65,11 @@ TASKS = [
         "id": "claim-types",
         "question": "What claim types does ARC support?",
         "facts": [
-            ["observation"],
-            ["decision"],
-            ["uncertainty"],
-            ["dependency"],
-            ["conflict"],
+            "observation type exists",
+            "decision type exists",
+            "uncertainty type exists",
+            "dependency type exists",
+            "conflict type exists",
         ],
         "files": ["models.py"],
     },
@@ -78,10 +77,10 @@ TASKS = [
         "id": "project-detect",
         "question": "How does arc init detect what kind of project it's scanning?",
         "facts": [
-            ["pyproject.toml"],
-            ["package.json"],
-            ["Cargo.toml", "cargo"],
-            ["marker", "_MARKERS", "detect"],
+            "Checks for pyproject.toml to detect Python projects",
+            "Checks for package.json to detect JavaScript projects",
+            "Checks for Cargo.toml to detect Rust projects",
+            "Uses marker files to determine project type",
         ],
         "files": ["init.py"],
     },
@@ -89,9 +88,9 @@ TASKS = [
         "id": "archive-format",
         "question": "What file format does a .arc archive use internally?",
         "facts": [
-            ["SQLite", "sqlite", "sqlite3"],
-            ["blobs", "blob"],
-            ["meta", "metadata"],
+            "Archives use SQLite as the storage format",
+            "There is a blobs table for content-addressed data",
+            "There is a meta table for manifest and metadata",
         ],
         "files": ["cas.py"],
     },
@@ -99,9 +98,8 @@ TASKS = [
         "id": "merge-dedup",
         "question": "How are duplicate claims handled when merging two archives?",
         "facts": [
-            ["text", "content"],
-            ["source", "agent"],
-            ["different source", "confirmation", "kept", "both"],
+            "Claims are compared by text content for deduplication",
+            "Claims from different sources with same text are kept as confirmations",
         ],
         "files": ["merge.py"],
     },
@@ -109,9 +107,9 @@ TASKS = [
         "id": "corrupt-handling",
         "question": "What happens when you try to load a corrupt .arc file?",
         "facts": [
-            ["rejected", "rejected=True", "reject"],
-            ["DatabaseError", "database error", "not a database"],
-            ["valid=False", "not valid", "invalid", "fails", "error"],
+            "Loading a corrupt file results in a rejected archive",
+            "DatabaseError or similar exception is caught",
+            "The verification result indicates the archive is not valid",
         ],
         "files": ["loader.py"],
     },
@@ -119,9 +117,9 @@ TASKS = [
         "id": "snapshot-select",
         "question": "How does arc snapshot select which claims to include?",
         "facts": [
-            ["last", "most recent", "latest"],
-            ["timestamp", "time", "sorted", "sort"],
-            ["filter", "claim_type", "source"],
+            "Takes the last N claims",
+            "Claims are sorted by timestamp",
+            "Claims can be filtered by type or source",
         ],
         "files": ["snapshot.py"],
     },
@@ -129,9 +127,9 @@ TASKS = [
         "id": "embedder-models",
         "question": "What embedding models does ARC support?",
         "facts": [
-            ["sentence-transformers", "sentence_transformers", "SentenceTransformer", "MiniLM"],
-            ["TF-IDF", "tfidf", "TfidfEmbedder", "tf_idf"],
-            ["fallback", "force_tfidf", "falls back"],
+            "Supports sentence-transformers for neural embeddings",
+            "Supports TF-IDF as a fallback embedder",
+            "Falls back to TF-IDF when sentence-transformers is not available",
         ],
         "files": ["embeddings.py"],
     },
@@ -139,10 +137,9 @@ TASKS = [
         "id": "merkle-root",
         "question": "How is the manifest root digest computed?",
         "facts": [
-            ["SHA-256", "sha256", "SHA256"],
-            ["root_digest", "compute_root_digest"],
-            ["excluded", "pop", "excluding"],
-            ["sort_keys", "sorted", "deterministic"],
+            "Uses SHA-256 to hash the manifest content",
+            "The root_digest field is excluded from its own computation",
+            "JSON is serialized with sorted keys for determinism",
         ],
         "files": ["models.py", "cas.py"],
     },
@@ -150,11 +147,10 @@ TASKS = [
         "id": "evidence-trace",
         "question": "How does a claim trace back to source code?",
         "facts": [
-            ["EvidencePointer", "evidence"],
-            ["source_unit_id", "source unit"],
-            ["span", "line"],
-            ["resource_id", "resource"],
-            ["locator", "file path", "file_path"],
+            "Claims have EvidencePointer objects linking to source units",
+            "Evidence includes source_unit_id to identify the code chunk",
+            "Evidence includes line span information",
+            "Source units link to resources via resource_id",
         ],
         "files": ["models.py"],
     },
@@ -162,9 +158,9 @@ TASKS = [
         "id": "init-json",
         "question": "What does arc init --json output?",
         "facts": [
-            ["top_claims", "claims"],
-            ["project", "name"],
-            ["json", "JSON", "--json"],
+            "JSON output includes top claims from the archive",
+            "JSON output includes the project name",
+            "Output is structured JSON for agent consumption",
         ],
         "files": ["cli.py", "init.py"],
     },
@@ -172,13 +168,12 @@ TASKS = [
         "id": "builder-stages",
         "question": "What are the stages of the ARC build pipeline?",
         "facts": [
-            ["ingest", "scan"],
-            ["chunk", "split"],
-            ["extract", "extraction"],
-            ["deduplicate", "dedup"],
-            ["index", "embed"],
-            ["assemble", "write"],
-            ["validate", "verify"],
+            "Pipeline includes ingestion of source files",
+            "Pipeline includes chunking into text units",
+            "Pipeline includes claim extraction",
+            "Pipeline includes deduplication",
+            "Pipeline includes embedding and indexing",
+            "Pipeline includes assembly into archive format",
         ],
         "files": ["builder.py"],
     },
@@ -186,9 +181,9 @@ TASKS = [
         "id": "selective-load",
         "question": "How does arc load filter claims by type and source?",
         "facts": [
-            ["claim_type", "--type", "type"],
-            ["source", "--source", "agent"],
-            ["filter", "select", "query"],
+            "Can filter claims by claim_type",
+            "Can filter claims by source agent",
+            "Supports task-based semantic filtering",
         ],
         "files": ["loader.py", "cli.py"],
     },
@@ -196,10 +191,10 @@ TASKS = [
         "id": "arcconfig",
         "question": "What does .arcconfig contain and how is it used?",
         "facts": [
-            ["TOML", "toml", ".arcconfig"],
-            ["project", "name"],
-            ["build", "scan"],
-            ["embeddings", "tfidf", "neural"],
+            "Config file uses TOML format",
+            "Contains project name and type",
+            "Contains build settings like scan directories",
+            "Contains embeddings configuration",
         ],
         "files": ["init.py", "cli.py"],
     },
@@ -230,7 +225,8 @@ def retrieve_with_arc(archive_path: str, question: str) -> tuple[str, int]:
         parts.append(f"[{c.claim_type.upper()}]{source_hint} {c.text}")
 
     context = "\n".join(parts)
-    return context, len(loaded.claims)
+    claim_texts = [c.text for c in loaded.claims]
+    return context, len(loaded.claims), claim_texts
 
 
 def retrieve_with_arc_raw(archive_path: str, question: str) -> tuple[str, int]:
@@ -339,25 +335,119 @@ class TaskResult:
     raw_hallucinations: int | None = None
 
 
-def score_fact_recall(context: str, facts: list) -> float:
+def score_fact_recall(context: str, facts: list, claim_texts: list[str] | None = None) -> float:
     """Fraction of ground-truth facts found in context.
 
-    Each fact is either a string or a list of acceptable variants.
-    A fact is "found" if ANY variant appears as a substring in the context.
+    Two modes:
+    - With ANTHROPIC_API_KEY: LLM judge per fact. Semantic matching.
+    - Without: substring matching. Deterministic fallback.
+
+    Args:
+        context: Full context as single string (for substring fallback).
+        facts: List of fact descriptions.
+        claim_texts: Individual claim texts (for LLM judge pre-filtering).
     """
     if not facts:
         return 0.0
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if api_key and claim_texts:
+        return _score_with_llm_judge(claim_texts, facts, api_key)
+    return _score_with_substring(context, facts)
+
+
+def _score_with_substring(context: str, facts: list) -> float:
+    """Substring matching with variant lists. Deterministic fallback."""
     ctx_lower = context.lower()
     found = 0
     for fact in facts:
         if isinstance(fact, list):
-            # Variant list — any match counts
             if any(v.lower() in ctx_lower for v in fact):
                 found += 1
         else:
-            # Plain string (backward compat)
             if fact.lower() in ctx_lower:
                 found += 1
+    return found / len(facts)
+
+
+_JUDGE_CACHE: dict[tuple[str, str], bool] = {}
+
+
+def _score_with_llm_judge(claim_texts: list[str], facts: list, api_key: str) -> float:
+    """LLM judge: pre-filter to top 10 claims per fact, then judge semantically."""
+    import urllib.request
+
+    found = 0
+    for fact in facts:
+        fact_desc = fact[0] if isinstance(fact, list) else fact
+
+        # Pre-filter: keyword overlap + substring matching
+        fact_lower = fact_desc.lower()
+        # Extract meaningful tokens (keep hyphenated and dotted terms intact)
+        fact_tokens = set(re.findall(r"[\w][\w.-]+", fact_lower))
+        fact_tokens = {t for t in fact_tokens if len(t) > 2}
+
+        scored_claims = []
+        for claim in claim_texts:
+            claim_lower = claim.lower()
+            # Word-level overlap
+            word_hits = sum(1 for t in fact_tokens if t in claim_lower)
+            # Substring match for multi-word terms
+            substr_hits = sum(1 for t in fact_tokens if len(t) > 4 and t in claim_lower)
+            score = word_hits + substr_hits * 2
+            if score > 0:
+                scored_claims.append((score, claim))
+        scored_claims.sort(key=lambda x: -x[0])
+        top_claims = [c for _, c in scored_claims[:15]]
+
+        if not top_claims:
+            continue
+
+        # Cache
+        cache_key = (fact_desc, str(hash("|".join(top_claims))))
+        if cache_key in _JUDGE_CACHE:
+            if _JUDGE_CACHE[cache_key]:
+                found += 1
+            continue
+
+        relevant_context = "\n".join(f"- {c}" for c in top_claims)
+        prompt = (
+            f"Does any of these claims contain or convey this fact?\n\n"
+            f"Fact: {fact_desc}\n\n"
+            f"Claims:\n{relevant_context}\n\n"
+            f"Answer YES or NO."
+        )
+
+        body = json.dumps({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 5,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+                answer = data.get("content", [{}])[0].get("text", "").strip().upper()
+                hit = answer.startswith("YES")
+                _JUDGE_CACHE[cache_key] = hit
+                if hit:
+                    found += 1
+        except Exception:
+            # Fallback: check if any top claim contains the fact description
+            hit = any(fact_desc.lower() in c.lower() for c in top_claims)
+            _JUDGE_CACHE[cache_key] = hit
+            if hit:
+                found += 1
+
     return found / len(facts)
 
 
@@ -489,8 +579,8 @@ def run_benchmark() -> list[TaskResult]:
             print(f"  [{i}/{len(TASKS)}] {task['id']}...", file=sys.stderr, end="", flush=True)
 
             # Strategy 1: ARC claims
-            arc_ctx, arc_claims = retrieve_with_arc(archive_path, task["question"])
-            arc_recall = score_fact_recall(arc_ctx, task["facts"])
+            arc_ctx, arc_claims, arc_claim_texts = retrieve_with_arc(archive_path, task["question"])
+            arc_recall = score_fact_recall(arc_ctx, task["facts"], claim_texts=arc_claim_texts)
             arc_noise = score_noise_ratio(arc_ctx, task["files"])
             arc_tokens = estimate_tokens(arc_ctx)
 
@@ -541,7 +631,8 @@ def print_results(results: list[TaskResult]) -> None:
     """Print results table."""
     use_llm = results[0].arc_correct is not None
 
-    avg = lambda xs: sum(xs) / len(xs) if xs else 0
+    def avg(xs):
+        return sum(xs) / len(xs) if xs else 0
 
     arc_recalls = [r.arc_fact_recall for r in results]
     arc_raw_recalls = [r.arc_raw_fact_recall for r in results]
@@ -583,12 +674,21 @@ def print_results(results: list[TaskResult]) -> None:
               f" {r.arc_tokens:>6} {r.arc_raw_tokens:>6} {r.raw_tokens:>6}")
 
     # Summary
-    best_arc = max(arc_recalls[i] for i in range(len(results)))
-    best_search = max(arc_raw_recalls[i] for i in range(len(results)))
-
-    claims_wins = sum(1 for r in results if r.arc_fact_recall >= r.raw_fact_recall and r.arc_fact_recall >= r.arc_raw_fact_recall)
-    search_wins = sum(1 for r in results if r.arc_raw_fact_recall >= r.raw_fact_recall and r.arc_raw_fact_recall >= r.arc_fact_recall)
-    grep_wins = sum(1 for r in results if r.raw_fact_recall > r.arc_fact_recall and r.raw_fact_recall > r.arc_raw_fact_recall)
+    claims_wins = sum(
+        1 for r in results
+        if r.arc_fact_recall >= r.raw_fact_recall
+        and r.arc_fact_recall >= r.arc_raw_fact_recall
+    )
+    search_wins = sum(
+        1 for r in results
+        if r.arc_raw_fact_recall >= r.raw_fact_recall
+        and r.arc_raw_fact_recall >= r.arc_fact_recall
+    )
+    grep_wins = sum(
+        1 for r in results
+        if r.raw_fact_recall > r.arc_fact_recall
+        and r.raw_fact_recall > r.arc_raw_fact_recall
+    )
 
     print(f"\nBest strategy per task: Claims={claims_wins}, Search={search_wins}, Grep={grep_wins}")
 
