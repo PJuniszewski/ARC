@@ -240,16 +240,20 @@ ARC preserves near-hybrid retrieval quality while making every result traceable:
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
 
-**Systems compared:**
-- **hybrid_arc** = ARC retrieval pipeline (the product — claims + evidence + filtering)
-- **hybrid** = raw vector + keyword search, no semantic layer, no traceability
-- **vector** = vector-only search (sentence-transformers)
-- **tfidf** = keyword-only search (TF-IDF)
-- **arc** = ARC without the hybrid refinement layer (base extraction only)
+**What are these systems?**
+- **hybrid_arc** — ARC: typed claims, evidence pointers, semantic filtering. The product.
+- **hybrid** — best baseline: vector embeddings + keyword matching on raw code chunks. What you'd get searching the repo with a good RAG setup, no ARC. No traceability.
+- **vector** — embedding search only (sentence-transformers cosine similarity)
+- **tfidf** — keyword search only (TF-IDF term matching)
+- **arc** — ARC claim extraction without the hybrid scoring refinement layer
 
-**Key columns:** Context Recall = did it find the right facts? Traceability = can you trace each result to source file + line?
+**What do the columns mean?**
+- **Context Recall** — fraction of ground-truth facts the system found (higher = found more relevant code)
+- **Traceability** — can each result be traced to an exact source file and line range? (1.0 = yes, 0.0 = no)
+- **Debuggability** — are results structured enough to inspect and debug? (claims vs raw text)
+- **Token Efficiency** — how much prompt space is saved vs dumping everything
 
-**Takeaway:** hybrid_arc matches hybrid recall while adding full traceability (1.0 vs 0.0) — every result links back to source code.
+**Takeaway:** hybrid_arc matches the best raw retrieval (hybrid) on recall, while adding full traceability — every result links back to source code. The baselines find the same facts but can't tell you where they came from.
 
 ---
 
