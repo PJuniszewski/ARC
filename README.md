@@ -9,55 +9,52 @@
 <!-- COVERAGE-BADGE-END -->
 [![Stars](https://img.shields.io/github/stars/PJuniszewski/ARC)](https://github.com/PJuniszewski/ARC)
 
-**AI answers are hard to trust. ARC makes them inspectable.**
+**A context passing protocol for AI agents.** ARC packages knowledge into verifiable, typed artifacts that agents can produce, consume, merge, and trace.
 
-ARC packages repository knowledge into a verifiable context artifact, so agents can load precise, traceable context instead of piecing it together on the fly.
-
-> ARC doesn't make AI smarter. It makes it inspectable.
+> MCP solved tool calling between agents. ARC solves context handoff.
 
 ---
 
-## Why ARC
+## The problem
 
-AI agents don't operate on a stable, structured view of your system.
-
-They piece together context on the fly from:
-- conversation history
-- files they read
-- retrieval results
-
-This works - but the result is often:
-- redundant
-- noisy
-- hard to verify
-
-ARC changes that.
-
-Instead of guessing and searching blindly, agents start from a pre-built, structured context with evidence.
+When agent A hands off work to agent B, context is lost:
 
 ```
-guess -> search -> hope
+Agent A: "I reviewed the auth module. Found 3 issues, decided to migrate to JWT."
+Agent B: *starts from scratch, re-reads everything, reaches different conclusions*
 ```
 
-becomes:
-
-```
-load -> locate -> prove
-```
+Either A dumps raw text into B's prompt (noisy, unverifiable) or B rebuilds context from scratch (wasteful, inconsistent).
 
 ---
 
-## How it works
+## How ARC solves it
 
-```
-repo + docs + tickets + policies
-  -> arc build .
-  -> semantic layers + manifest
-  -> project.arc
-  -> agent loads only what it needs
+ARC turns agent context into structured, verifiable artifacts:
+
+```mermaid
+graph LR
+    A[Agent A] -->|produces| ARC1[review.arc]
+    ARC1 -->|"arc load --type decision"| B[Agent B]
+    B -->|produces| ARC2[fixes.arc]
+    ARC2 -->|traceable back to| ARC1
 ```
 
-ARC builds a structured representation of your system once, then lets agents query it efficiently and reliably.
+Every claim in an ARC artifact has a **type**, **source**, **evidence**, and **confidence**. Nothing is opaque text.
+
+---
+
+## Claim types
+
+ARC distinguishes what kind of knowledge is being passed:
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| `observation` | Factual, grounded in source | "auth/views.py uses session-based auth" |
+| `decision` | Judgment by agent or human | "we should migrate to JWT" |
+| `uncertainty` | Open question | "unclear if rate limiting applies to /admin" |
+| `dependency` | Blocker or prerequisite | "requires updating middleware config" |
+| `conflict` | Merge disagreement | Auto-generated when agents disagree |
 
 ---
 
@@ -71,24 +68,190 @@ pip install arc-context
 
 ## Quick start
 
+### Build context from a codebase
+
 ```bash
-arc build . --out project.arc                         # extract claims, decisions, evidence from source
-arc inspect project.arc                               # show layers, blob count, manifest summary
-arc verify project.arc                                # check Merkle integrity, detect tampering
-arc load project.arc --task "review this auth change" # retrieve only context relevant to the task
-arc diff project-v1.arc project-v2.arc                # compare two archive versions
+arc build ./src --out project.arc
+arc inspect project.arc
+arc verify project.arc
+```
+
+### Query by type and source
+
+```bash
+arc load project.arc --task "auth migration"           # semantic search
+arc load project.arc --type decision                   # only decisions
+arc load project.arc --source agent-a                  # only from agent A
+arc load project.arc --type decision --source agent-a  # compose filters
+```
+
+### Hand off context between agents
+
+```bash
+arc snapshot full.arc --out handoff.arc --last 10      # lightweight subset
+arc merge security.arc performance.arc --out combined.arc  # parallel work
+arc diff review.arc fixes.arc                          # compare artifacts
 ```
 
 ---
 
-## What ARC does
+## Agent-to-agent workflow
 
-- **Builds structured context** - claims, decisions, evidence pointers
-- **Makes answers inspectable** - every claim is traceable to source
-- **Loads selectively** - hybrid vector + keyword retrieval
-- **Stores content-addressed** - Merkle integrity, reproducible builds
-- **Diffs versions** - track how context changes over time
-- **Verifies offline** - no runtime dependency on external services
+### Sequential handoff
+
+```mermaid
+sequenceDiagram
+    participant A as Agent A (Reviewer)
+    participant ARC as .arc artifact
+    participant B as Agent B (Implementer)
+
+    A->>A: Review codebase
+    A->>ARC: arc create review.arc
+    Note over ARC: observations + decisions<br/>+ uncertainties + dependencies
+    ARC->>B: arc load --type decision
+    B->>B: Act on decisions
+    B->>ARC: arc create fixes.arc
+    Note over ARC: fixes reference review.arc<br/>claim IDs for traceability
+```
+
+### Parallel merge
+
+```mermaid
+sequenceDiagram
+    participant C as Agent C (Security)
+    participant D as Agent D (Performance)
+    participant M as arc merge
+    participant E as Agent E (Resolver)
+
+    par Parallel reviews
+        C->>C: security.arc
+        D->>D: performance.arc
+    end
+    C->>M: security.arc
+    D->>M: performance.arc
+    M->>M: Observations coexist<br/>Conflicting decisions flagged
+    M->>E: combined.arc
+    E->>E: arc load --type conflict
+    E->>E: Resolve disagreements
+```
+
+---
+
+## Full pipeline
+
+```mermaid
+graph TB
+    subgraph "Build"
+        SRC[Source files] --> ING[Ingest]
+        ING --> CHK[Chunk]
+        CHK --> EXT[Extract claims]
+        EXT --> DED[Deduplicate]
+        DED --> IDX[Embed + Index]
+        IDX --> ASM[Assemble]
+        ASM --> ART[".arc artifact"]
+    end
+
+    subgraph "Artifact"
+        ART --> MAN[manifest.json]
+        ART --> BLB[blobs/sha256/...]
+        ART --> REF[refs/provenance.json]
+    end
+
+    subgraph "Consume"
+        ART --> VER{arc verify}
+        VER -->|valid| LOAD[arc load]
+        LOAD --> FILT[Filter by type/source/task]
+        FILT --> AGENT[Agent runtime]
+    end
+
+    subgraph "Multi-agent"
+        ART --> SNAP[arc snapshot]
+        SNAP --> HAND[Handoff to next agent]
+        ART --> MERGE[arc merge]
+        MERGE --> COMBINED[Combined artifact]
+        COMBINED --> CONFLICTS{Conflicts?}
+        CONFLICTS -->|yes| RESOLVE[Agent resolves]
+        CONFLICTS -->|no| AGENT
+    end
+```
+
+---
+
+## Python API
+
+```python
+from arc import create_archive, load, merge, snapshot
+from arc.models import Claim
+
+# Agent produces claims
+claims = [
+    Claim(text="auth uses session tokens", claim_type="observation",
+          source="review-agent", confidence=0.95),
+    Claim(text="should migrate to JWT", claim_type="decision",
+          source="review-agent", confidence=0.8),
+]
+create_archive("review.arc", claims, archive_id="arc://review")
+
+# Next agent loads and filters
+loaded = load("review.arc", claim_type="decision")
+for claim in loaded.claims:
+    print(f"[{claim.claim_type}] {claim.text} (by {claim.source})")
+
+# Merge parallel work
+result, manifest = merge("security.arc", "perf.arc", "combined.arc")
+print(f"Conflicts: {result.conflicts_detected}")
+```
+
+---
+
+## Architecture
+
+```
+Source -> Builder -> Artifact -> Loader -> Runtime
+                        |
+                    snapshot / merge
+                        |
+                  Agent-to-Agent handoff
+```
+
+- **Builder**: extracts typed claims from source (8-stage pipeline)
+- **Artifact**: content-addressed, Merkle-sealed `.arc` directory
+- **Loader**: selective loading with type/source/task filtering
+- **Snapshot**: lightweight subset for quick handoffs
+- **Merge**: combine parallel agent outputs, flag conflicts
+
+Full design: [`docs/architecture.md`](docs/architecture.md) | Protocol: [`docs/protocol.md`](docs/protocol.md)
+
+---
+
+## CLI reference
+
+| Command | Purpose |
+|---------|---------|
+| `arc build <dir> --out <path>` | Build archive from source directory |
+| `arc snapshot <arc> --out <path> --last N` | Lightweight subset for handoff |
+| `arc merge <a> <b> --out <path>` | Merge two archives, flag conflicts |
+| `arc load <arc> [--type T] [--source S] [--task Q]` | Load and query |
+| `arc inspect <arc>` | Show metadata and layers |
+| `arc verify <arc>` | Check Merkle integrity |
+| `arc diff <a> <b>` | Compare two archives |
+| `arc restore <arc> --out <dir>` | Reconstruct source files |
+
+---
+
+## Benchmark
+
+ARC preserves near-hybrid retrieval quality while making every result traceable:
+
+<!-- BENCHMARK-START -->
+30 tasks per repo, 6 categories. Context recall = fraction of required facts found.
+
+Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
+<!-- BENCHMARK-END -->
+
+- ~93% of hybrid recall with full evidence traceability (1.0 vs 0.0)
+- 65%+ token reduction vs raw hybrid retrieval
+- Tested on FastAPI (15K LOC) and Django (155K LOC)
 
 ---
 
@@ -101,27 +264,7 @@ arc diff project-v1.arc project-v2.arc                # compare two archive vers
 
 ---
 
-## Architecture
-
-ARC is built as a simple 5-layer system:
-
-```
-Source -> Builder -> Artifact -> Loader -> Runtime
-```
-
-- **Builder** extracts semantic structure (claims, decisions, evidence)
-- **Artifact** stores it as a content-addressed archive
-- **Loader** retrieves only relevant context for a task
-
-Full system design: [`docs/architecture.md`](docs/architecture.md)
-
----
-
 ## Benchmark
-
-ARC preserves near-hybrid retrieval quality while making every result traceable and debuggable.
-
-> hybrid_arc ~ hybrid recall, but with full traceability (1.0 vs 0.0)
 
 <!-- BENCHMARK-START -->
 30 tasks per repo, 6 categories. Context recall = fraction of required facts found.
@@ -141,41 +284,30 @@ hybrid_arc vs hybrid: d = +0.000 (negligible)
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
 
-- ~93% of hybrid recall
-- every result traceable to source file + line
+- ~93% of hybrid recall with full evidence traceability (1.0 vs 0.0)
+- 65%+ token reduction vs raw hybrid retrieval
 
 ---
 
-## Example
+## Docs
 
-Query:
-
-```
-How does authentication work?
-```
-
-ARC returns:
-- Answer
-- Evidence (files + lines)
-- Suggested files to inspect
-
----
-
-## When to use ARC
-
-- working with large repos
-- debugging AI-generated answers
-- reviewing code changes with context
-- building AI agents that need reliable context
+| Document | Purpose |
+|----------|---------|
+| [`docs/protocol.md`](docs/protocol.md) | Context passing protocol for integrators |
+| [`docs/claim-schema.md`](docs/claim-schema.md) | Typed claim schema design |
+| [`docs/architecture.md`](docs/architecture.md) | 5-layer system model |
+| [`docs/spec/arc-format.md`](docs/spec/arc-format.md) | Archive format specification |
+| [`docs/spec/semantic-model.md`](docs/spec/semantic-model.md) | Claim, Decision, Evidence models |
+| [`docs/spec/cli-contract.md`](docs/spec/cli-contract.md) | CLI command contracts |
 
 ---
 
 ## Development
 
 ```bash
-make test
-make lint
-make benchmark-smoke
+make test              # run test suite
+make lint              # ruff check
+make benchmark-smoke   # quick benchmark on FastAPI snapshot
 ```
 
 ---

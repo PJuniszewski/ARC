@@ -127,8 +127,9 @@ Primary source for:
 
 ### `docs/spec/cli-contract.md`
 Primary source for:
-- command surface
+- command surface (build, snapshot, merge, load, inspect, verify, diff, restore)
 - expected inputs and outputs
+- filter flags (--type, --source, --task)
 - UX contract for tool users
 
 ---
@@ -151,6 +152,26 @@ Defines why the builder preserves full fidelity (no lossy compression). Selectiv
 Defines scope expansion: 3 optional operational layer types (tools, policy, workflow) for packaging agent capabilities alongside knowledge.
 
 Use ADRs when something is accepted and should stop being debated casually.
+
+---
+
+## Protocol docs
+
+### `docs/protocol.md`
+Primary reference for agent-to-agent context passing:
+- what an ARC artifact is
+- claim types and when to use each
+- how to produce (build, snapshot, create)
+- how to consume (load, query by type/source)
+- how to merge parallel agent outputs
+- verification guarantees
+
+### `docs/claim-schema.md`
+Design document for typed claims:
+- claim_type, source, timestamp, references fields
+- rules per type (observation, decision, uncertainty, dependency, conflict)
+- query interface
+- backward compatibility mapping
 
 ---
 
@@ -288,8 +309,23 @@ Named constants: stop words, builder defaults, loader thresholds, scoped retriev
 ### `src/arc/diff.py`
 Structural and semantic diff between two archives.
 
+### `src/arc/assembly.py`
+Shared archive assembly: serialize layers to CAS blobs. Used by snapshot, merge, and create. Includes evidence pointer validation.
+
+### `src/arc/create.py`
+Programmatic archive creation from typed claims. No source directory needed. Primary API for agents producing artifacts.
+
+### `src/arc/snapshot.py`
+Lightweight subset of an existing archive. Takes last N claims (sorted by timestamp), includes referenced source units, valid Merkle integrity.
+
+### `src/arc/merge.py`
+Two-way merge of parallel agent outputs. Observations coexist, duplicates deduped, conflicting decisions flagged via cosine similarity.
+
+### `src/arc/imports.py`
+Python import graph: forward/reverse dependency tracking. Stored as `graph.imports` layer.
+
 ### `src/arc/cli.py`
-CLI entry point: `arc build`, `arc inspect`, `arc verify`, `arc diff`, `arc restore`.
+CLI entry point: `arc build`, `arc inspect`, `arc verify`, `arc load`, `arc snapshot`, `arc merge`, `arc diff`, `arc restore`.
 
 ### `src/arc/py.typed`
 PEP 561 marker — indicates the package ships inline type annotations.
@@ -436,6 +472,13 @@ Read:
 1. `docs/provenance-signing.md`
 2. `docs/security-model.md`
 3. relevant ADRs
+
+### I want to pass context between agents
+Read:
+1. `docs/protocol.md`
+2. `docs/claim-schema.md`
+3. `src/arc/create.py` (API for agents)
+4. `src/arc/merge.py` (parallel work)
 
 ### I want to update project state
 Read and update:
