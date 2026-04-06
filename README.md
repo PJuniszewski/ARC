@@ -252,9 +252,16 @@ hybrid_arc vs hybrid: d = +0.000 (negligible)
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
 
-- ~93% of hybrid recall with full evidence traceability (1.0 vs 0.0)
-- 65%+ token reduction vs raw hybrid retrieval
-- Tested on FastAPI (15K LOC) and Django (155K LOC)
+**Systems compared:**
+- **hybrid_arc** = ARC retrieval pipeline (the product — claims + evidence + filtering)
+- **hybrid** = raw vector + keyword search, no semantic layer, no traceability
+- **vector** = vector-only search (sentence-transformers)
+- **tfidf** = keyword-only search (TF-IDF)
+- **arc** = ARC without the hybrid refinement layer (base extraction only)
+
+**Key columns:** Context Recall = did it find the right facts? Traceability = can you trace each result to source file + line?
+
+**Takeaway:** hybrid_arc matches hybrid recall while adding full traceability (1.0 vs 0.0) — every result links back to source code.
 
 ---
 
