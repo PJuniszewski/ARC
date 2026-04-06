@@ -10,10 +10,7 @@ from pathlib import Path
 from .assembly import assemble_archive, validate_evidence
 from .cas import ContentAddressedStore
 from .embeddings import get_embedder
-from .models import (
-    Claim, Decision, Manifest, PolicyRule,
-    Resource, TextUnit, ToolDeclaration, WorkflowStep, _generate_id,
-)
+from .models import Claim, Decision, Manifest, Resource, TextUnit, _generate_id
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +210,7 @@ class MergeResult:
 
     def summary(self) -> str:
         lines = [
-            f"Merge complete:",
+            "Merge complete:",
             f"  Archive A: {self.claims_a} claims",
             f"  Archive B: {self.claims_b} claims",
             f"  Merged:    {self.merged_claims} claims",

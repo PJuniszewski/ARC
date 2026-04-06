@@ -29,7 +29,7 @@ from .models import (
     WorkflowStep,
     _generate_id,
 )
-from .imports import ImportGraph, build_import_graph
+from .imports import build_import_graph
 from .provenance import BuildProvenance
 
 

@@ -8,7 +8,7 @@ from typing import Optional
 
 from .assembly import assemble_archive, validate_evidence
 from .cas import ContentAddressedStore
-from .models import Claim, Manifest
+from .models import Manifest
 
 logger = logging.getLogger(__name__)
 
