@@ -144,7 +144,116 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                     )
                 )
 
+    # --- Code-aware extraction (language-agnostic) ---
+    # Works on any language after chunking: function/class chunks have
+    # a declaration line + optional docstring/comment.
+    for tu in text_units:
+        lines = tu.content.strip().splitlines()
+        if not lines:
+            continue
+
+        # Rule 1: First docstring or block comment → observation claim
+        # Only for function/class chunks (not markdown sections)
+        docstring = ""
+        if tu.kind == "function":
+            docstring = _extract_first_docstring(tu.content)
+        if docstring and len(docstring) >= 15 and docstring not in seen_texts:
+            # Prefix with the declaration name for context
+            decl_name = _extract_declaration_name(lines[0])
+            claim_text = f"{decl_name}: {docstring}" if decl_name else docstring
+            penalty = _injection_penalty(claim_text)
+            if penalty >= 0.3:
+                continue  # skip likely injection payloads entirely
+            seen_texts.add(docstring)
+            claims.append(
+                Claim(
+                    id=_generate_id(f"code:{docstring}"),
+                    text=claim_text,
+                    kind="definition",
+                    evidence=[EvidencePointer(source_unit_id=tu.id, span=tu.span, weight=1.0)],
+                    confidence=0.85 - penalty,
+                    status="contested" if penalty > 0 else "observed",
+                    derived_from=tu.id,
+                )
+            )
+
+        # Rule 2: Module-level constants (ALL_CAPS = value)
+        # Only in code chunks — markdown sections can have ALL_CAPS headers
+        if tu.kind not in ("function", "paragraph", "frontmatter"):
+            continue
+        for line in lines:
+            m = re.match(r"^([A-Z][A-Z_0-9]{2,})\s*[=:]\s*(.+)$", line.strip())
+            if m:
+                const_name, const_val = m.group(1), m.group(2).strip()
+                claim_text = f"{const_name} = {const_val}"
+                if len(claim_text) > 200:
+                    claim_text = claim_text[:197] + "..."
+                if claim_text not in seen_texts:
+                    seen_texts.add(claim_text)
+                    claims.append(
+                        Claim(
+                            id=_generate_id(f"const:{claim_text}"),
+                            text=claim_text,
+                            kind="definition",
+                            evidence=[EvidencePointer(source_unit_id=tu.id, span=tu.span, weight=0.9)],
+                            confidence=0.9,
+                            status="observed",
+                            derived_from=tu.id,
+                        )
+                    )
+
     return claims
+
+
+def _extract_first_docstring(content: str) -> str:
+    """Extract the first docstring or block comment from a code chunk.
+
+    Handles:
+      - Python triple-quote docstrings (''' or \""")
+      - C-style block comments (/* ... */)
+      - Hash-prefixed comment blocks (# ...)
+      - // comment blocks
+    """
+    # Python docstrings
+    m = re.search(r'(?:\"\"\"|\'\'\')(.*?)(?:\"\"\"|\'\'\')', content, re.DOTALL)
+    if m:
+        return " ".join(m.group(1).strip().splitlines()).strip()
+
+    # C-style block comments
+    m = re.search(r'/\*\*(.*?)\*/', content, re.DOTALL)
+    if not m:
+        m = re.search(r'/\*(.*?)\*/', content, re.DOTALL)
+    if m:
+        text = m.group(1)
+        # Clean comment formatting (* prefix on each line)
+        lines = [re.sub(r"^\s*\*\s?", "", l) for l in text.splitlines()]
+        return " ".join(l.strip() for l in lines if l.strip()).strip()
+
+    # Consecutive line comments (# or //)
+    lines = content.strip().splitlines()
+    comment_lines = []
+    started = False
+    for line in lines[1:]:  # skip declaration line
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith("//"):
+            comment_lines.append(re.sub(r"^[#/]+\s*", "", stripped))
+            started = True
+        elif started:
+            break
+    if comment_lines:
+        return " ".join(comment_lines).strip()
+
+    return ""
+
+
+def _extract_declaration_name(first_line: str) -> str:
+    """Extract the name from a declaration line (def X, class X, func X, fn X, etc.)."""
+    m = re.match(
+        r"^\s*(?:def|class|func|fn|fun|function|pub\s+fn|pub\s+func|export\s+function|export\s+class)\s+"
+        r"(\w+)",
+        first_line,
+    )
+    return m.group(1) if m else ""
 
 
 def extract_decisions(text_units: list[TextUnit]) -> list[Decision]:
