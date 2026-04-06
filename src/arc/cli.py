@@ -143,10 +143,33 @@ def main(argv: list[str] | None = None) -> int:
 
 def _cmd_build(args) -> int:
     import time
+    from pathlib import Path
 
     from .builder import build_archive
 
     t0 = time.monotonic()
+    source_dir = Path(args.source_dir).resolve()
+
+    # Load .arcconfig if present (CLI flags override)
+    config_path = source_dir / ".arcconfig"
+    force_tfidf = False
+    archive_id = args.id
+    if config_path.exists():
+        from .init import read_arcconfig
+        cfg = read_arcconfig(config_path)
+        print(f"  Using .arcconfig from {config_path}", file=sys.stderr)
+        build_cfg = cfg.get("build", {})
+        project_cfg = cfg.get("project", {})
+
+        # Embeddings: .arcconfig says "tfidf" or "neural"
+        if build_cfg.get("embeddings") == "tfidf":
+            force_tfidf = True
+
+        # Archive ID from project name if not set via CLI
+        if not archive_id and project_cfg.get("name"):
+            archive_id = f"arc://{project_cfg['name']}"
+    else:
+        print("  No .arcconfig found, using defaults", file=sys.stderr)
 
     def _on_progress(stage: str, detail: str) -> None:
         elapsed = time.monotonic() - t0
@@ -155,11 +178,12 @@ def _cmd_build(args) -> int:
         print(f"  [{stage}] {detail}  ({elapsed:.1f}s)", file=sys.stderr, flush=True)
 
     result = build_archive(
-        source_dir=args.source_dir,
+        source_dir=str(source_dir),
         output_dir=args.out,
-        archive_id=args.id,
+        archive_id=archive_id,
         archive_version=args.version,
         parent_archive=args.parent,
+        force_tfidf=force_tfidf,
         on_progress=_on_progress,
         output_format=getattr(args, "format", "sqlite"),
     )
