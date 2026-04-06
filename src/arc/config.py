@@ -8,17 +8,17 @@ MIN_SCORE: float = 0.15
 # Minimum hybrid score for evidence graph expansion candidates
 EXPANSION_MIN: float = 0.10
 
-# Maximum claims returned from task-based filtering
-MAX_FILTERED_CLAIMS: int = 12
+# Maximum claims returned from task-based filtering (floor; scales with archive)
+MAX_FILTERED_CLAIMS: int = 20
 
-# Top-K claims to consider in primary selection (adjusted by archive size)
-TOP_K_BASE: int = 8
+# Top-K claims to consider in primary selection (floor; scales with archive)
+TOP_K_BASE: int = 10
 
 # Minimum top-K floor regardless of archive size
-TOP_K_FLOOR: int = 3
+TOP_K_FLOOR: int = 5
 
 # Fraction of total claims used to compute dynamic top-K
-TOP_K_RATIO: float = 0.1
+TOP_K_RATIO: float = 0.15
 
 # --- BFS graph traversal ---
 

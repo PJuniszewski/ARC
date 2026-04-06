@@ -27,7 +27,6 @@ from .config import (
     MIN_SCORE,
     STOP_WORDS,
     TOP_K_BASE,
-    TOP_K_FLOOR,
     TOP_K_RATIO,
 )
 from .models import Claim, Decision, Manifest, PolicyRule, Resource, TextUnit, ToolDeclaration, WorkflowStep
@@ -333,6 +332,24 @@ def load(
     return loaded
 
 
+def _normalize_for_search(text: str) -> str:
+    """Normalize text for search: split snake_case/camelCase, lowercase, strip symbols."""
+    import re as _re
+    # Split camelCase: "SqliteCAS" → "Sqlite CAS", "camelCase" → "camel Case"
+    text = _re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+    text = _re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
+    # Replace _ and - with spaces
+    text = text.replace("_", " ").replace("-", " ")
+    return text.lower()
+
+
+def _substring_boost(query_tokens: set[str], claim_text: str) -> float:
+    """Boost if query tokens appear as substrings in claim text (catches vocab mismatches)."""
+    text_lower = claim_text.lower()
+    hits = sum(1 for t in query_tokens if len(t) >= 3 and t in text_lower)
+    return min(hits * 0.15, 0.4) if query_tokens else 0.0
+
+
 def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     """Filter claims by task relevance using hybrid keyword + vector scoring."""
     if not loaded.vector_store or loaded.vector_store.vectors is None:
@@ -357,17 +374,29 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     all_results = loaded.vector_store.search(query_vec, top_k=search_k)
     raw_results = [(cid, s, t) for cid, s, t in all_results if cid in claim_ids]
 
-    # Compute keyword overlap boost using stemmed tokens
-    query_tokens = set(embedder._tokenize(task))
+    # Normalize query for better matching: split snake_case/camelCase
+    norm_task = _normalize_for_search(task)
+    query_tokens = set(embedder._tokenize(norm_task))
+    # Also include tokens from original (un-normalized) query
+    query_tokens |= set(embedder._tokenize(task))
 
     # Content query tokens (stop words removed) for heading matching
     content_query_tokens = query_tokens - STOP_WORDS
+    # Normalized query tokens for substring matching
+    norm_query_tokens = set(norm_task.split()) - STOP_WORDS
 
     scored: list[tuple[str, float, str]] = []
     for cid, vscore, text in raw_results:
-        claim_tokens = set(embedder._tokenize(text))
+        # Normalize claim text before tokenizing
+        norm_text = _normalize_for_search(text)
+        claim_tokens = set(embedder._tokenize(norm_text))
+        # Also include original text tokens
+        claim_tokens |= set(embedder._tokenize(text))
         overlap = len(query_tokens & claim_tokens)
         kw_boost = overlap / len(query_tokens) if query_tokens else 0.0
+
+        # Substring boost: catches vocabulary mismatches
+        sub_boost = _substring_boost(norm_query_tokens, norm_text)
 
         # Section heading boost: if the claim was enriched with a heading
         # prefix (e.g. "Archive Classes: ..."), and most heading words
@@ -381,15 +410,15 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
                 if heading_match >= HEADING_MATCH_THRESHOLD:
                     heading_boost = HEADING_BOOST_WEIGHT * heading_match
 
-        hybrid = vscore + KEYWORD_BOOST_WEIGHT * kw_boost + heading_boost
+        hybrid = vscore + KEYWORD_BOOST_WEIGHT * kw_boost + heading_boost + sub_boost
         scored.append((cid, hybrid, text))
 
     # Sort by hybrid score descending
     scored.sort(key=lambda x: x[1], reverse=True)
 
     # Take top-k with minimum score threshold
-    dynamic_k = max(TOP_K_FLOOR, int(len(loaded.claims) * TOP_K_RATIO))
-    TOP_K = max(TOP_K_BASE, min(dynamic_k, len(loaded.claims) // 4))
+    # Dynamic TOP_K: scale with archive size
+    TOP_K = max(TOP_K_BASE, int(len(loaded.claims) * TOP_K_RATIO))
     results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= MIN_SCORE]
     if not results and scored:
         results = scored[:3]
@@ -448,9 +477,8 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             selected.append(claim)
             seen.add(claim.id)
 
-    # Hard cap: scale with archive size. Small archives (< 200 claims) return
-    # up to 25% of claims. Large archives capped at MAX_FILTERED_CLAIMS.
-    MAX_TOTAL = max(MAX_FILTERED_CLAIMS, len(loaded.claims) // 4)
+    # Hard cap: scale with archive size
+    MAX_TOTAL = max(MAX_FILTERED_CLAIMS, int(len(loaded.claims) * 0.25))
     pre_cap = len(selected)
     if len(selected) > MAX_TOTAL:
         selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)

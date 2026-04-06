@@ -177,7 +177,30 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                 )
             )
 
-        # Rule 2: Module-level constants (ALL_CAPS = value)
+        # Rule 2: Signature + body hints for functions without good docstrings
+        if tu.kind == "function":
+            decl_name = _extract_declaration_name(lines[0])
+            has_good_docstring = docstring and len(docstring) >= 15
+            if decl_name:
+                sig_claim = _build_signature_claim(decl_name, tu.content)
+                if sig_claim and sig_claim not in seen_texts:
+                    # If we already have a docstring claim, use signature as supplementary
+                    # (lower confidence). If no docstring, signature is primary.
+                    conf = 0.7 if has_good_docstring else 0.8
+                    seen_texts.add(sig_claim)
+                    claims.append(
+                        Claim(
+                            id=_generate_id(f"sig:{sig_claim}"),
+                            text=sig_claim,
+                            kind="definition",
+                            evidence=[EvidencePointer(source_unit_id=tu.id, span=tu.span, weight=0.8)],
+                            confidence=conf,
+                            status="observed",
+                            derived_from=tu.id,
+                        )
+                    )
+
+        # Rule 3: Module-level constants (ALL_CAPS = value)
         # Only in code chunks — markdown sections can have ALL_CAPS headers
         if tu.kind not in ("function", "paragraph", "frontmatter"):
             continue
@@ -254,6 +277,68 @@ def _extract_declaration_name(first_line: str) -> str:
         first_line,
     )
     return m.group(1) if m else ""
+
+
+def _build_signature_claim(func_name: str, content: str) -> str:
+    """Build a claim from function signature + body hints.
+
+    For functions without docstrings, combine:
+    - function name (split snake_case for readability)
+    - parameter types (if annotated)
+    - return type (if annotated)
+    - key calls (dotted names like hashlib.sha256, os.path.join)
+    """
+    lines = content.strip().splitlines()
+    if not lines:
+        return ""
+
+    # Extract signature from first line(s)
+    sig_line = lines[0]
+    params = ""
+    ret_type = ""
+
+    # Python-style: def name(args) -> type:
+    m = re.match(r".*\((.*?)\)\s*(?:->\s*(\S+))?\s*:", sig_line)
+    if m:
+        raw_params = m.group(1)
+        ret_type = m.group(2) or ""
+        # Extract parameter type hints
+        param_types = []
+        for p in raw_params.split(","):
+            p = p.strip()
+            if ":" in p:
+                pname, ptype = p.split(":", 1)
+                param_types.append(f"{pname.strip()}: {ptype.strip().split('=')[0].strip()}")
+        if param_types:
+            params = ", ".join(param_types)
+
+    # Extract key calls from body (dotted names that aren't builtins)
+    body = "\n".join(lines[1:])
+    calls = set()
+    for m in re.finditer(r"\b(\w+\.\w+)\b", body):
+        name = m.group(1)
+        # Skip self.x, cls.x, common attributes
+        if name.split(".")[0] in ("self", "cls", "super", "os", "sys"):
+            # Keep os.path, os.environ etc but skip self.anything
+            if name.startswith("self.") or name.startswith("cls."):
+                continue
+        calls.add(name)
+    # Keep most specific calls (max 3)
+    key_calls = sorted(calls, key=len, reverse=True)[:3]
+
+    # Build claim text
+    parts = [func_name]
+    if params:
+        parts.append(f"({params})")
+    if ret_type:
+        parts.append(f"-> {ret_type}")
+    if key_calls:
+        parts.append(f"uses {', '.join(key_calls)}")
+
+    claim = " ".join(parts)
+    if len(claim) < 10:
+        return ""
+    return claim
 
 
 def extract_decisions(text_units: list[TextUnit]) -> list[Decision]:
