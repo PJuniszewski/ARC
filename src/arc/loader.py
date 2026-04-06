@@ -388,7 +388,8 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     scored.sort(key=lambda x: x[1], reverse=True)
 
     # Take top-k with minimum score threshold
-    TOP_K = min(TOP_K_BASE, max(TOP_K_FLOOR, int(len(loaded.claims) * TOP_K_RATIO)))
+    dynamic_k = max(TOP_K_FLOOR, int(len(loaded.claims) * TOP_K_RATIO))
+    TOP_K = max(TOP_K_BASE, min(dynamic_k, len(loaded.claims) // 4))
     results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= MIN_SCORE]
     if not results and scored:
         results = scored[:3]
@@ -447,8 +448,9 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             selected.append(claim)
             seen.add(claim.id)
 
-    # Hard cap: if expansion added too many claims, keep the highest-scored
-    MAX_TOTAL = MAX_FILTERED_CLAIMS
+    # Hard cap: scale with archive size. Small archives (< 200 claims) return
+    # up to 25% of claims. Large archives capped at MAX_FILTERED_CLAIMS.
+    MAX_TOTAL = max(MAX_FILTERED_CLAIMS, len(loaded.claims) // 4)
     pre_cap = len(selected)
     if len(selected) > MAX_TOTAL:
         selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
