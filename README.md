@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 <!-- COVERAGE-BADGE-START -->
-[![Tested](https://img.shields.io/badge/tested-89%25%20coverage-brightgreen)](tests/)
+[![Tested](https://img.shields.io/badge/tested-88%25%20coverage-brightgreen)](tests/)
 <!-- COVERAGE-BADGE-END -->
 [![Stars](https://img.shields.io/github/stars/PJuniszewski/ARC)](https://github.com/PJuniszewski/ARC)
 
@@ -245,18 +245,6 @@ ARC preserves near-hybrid retrieval quality while making every result traceable:
 
 <!-- BENCHMARK-START -->
 30 tasks per repo, 6 categories. Context recall = fraction of required facts found.
-
-### FastAPI (15K LOC, 130 files)
-
-| System | Context Recall | Traceability | Debuggability | Token Efficiency |
-|--------| ------------- | ------------- | ------------- | ------------- |
-| hybrid | 0.450 | 0.000 | 0.000 | 0.999 |
-| **hybrid_arc** | **0.450** | **1.000** | **0.940** | **0.997** |
-| vector | 0.450 | 0.000 | 0.000 | 0.999 |
-| arc | 0.250 | 1.000 | 0.000 | 0.998 |
-| tfidf | 0.450 | 0.000 | 0.000 | 0.999 |
-
-hybrid_arc vs hybrid: d = +0.000 (negligible)
 
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
