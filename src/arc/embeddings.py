@@ -143,6 +143,13 @@ class TfidfEmbedder:
             unique_words = set(words)
             doc_freq.update(unique_words)
 
+        # Auto-scale vocabulary for large corpora.  256 dims covers ~1.2%
+        # of a 20K-term corpus, missing critical domain terms.  Scale to
+        # capture enough vocabulary that discriminative terms (e.g. "csrf",
+        # "middleware", "session") land in the vector space.
+        n_unique = len(all_words)
+        self.dimensions = max(self.dimensions, min(n_unique // 10, 2048))
+
         # Select top-N words as vocabulary
         top_words = [w for w, _ in all_words.most_common(self.dimensions)]
         self.vocab = {w: i for i, w in enumerate(top_words)}

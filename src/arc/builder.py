@@ -29,6 +29,7 @@ from .models import (
     WorkflowStep,
     _generate_id,
 )
+from .imports import ImportGraph, build_import_graph
 from .provenance import BuildProvenance
 
 
@@ -102,6 +103,9 @@ def build_archive(
     _progress("1/8", "Scanning files...")
     resources = _ingest(source_dir, provenance)
     _progress("1/8", f"Found {len(resources)} files")
+
+    # === Stage 1b: Import graph ===
+    import_graph = build_import_graph(resources, source_dir)
 
     # === Stage 2 & 3: Normalize + Chunk ===
     _progress("2/8", "Chunking...")
@@ -217,6 +221,17 @@ def build_archive(
         required=False,
         depends_on=["claims"],
     ))
+
+    # Import graph layer
+    if import_graph.forward:
+        ig_data = json.dumps(import_graph.to_dict(), sort_keys=True).encode()
+        layers.append(Layer(
+            name="import-graph",
+            type="graph.imports",
+            digest=cas.store_blob(ig_data),
+            required=False,
+            depends_on=["resources"],
+        ))
 
     # Operational layers
     if tools:

@@ -79,14 +79,15 @@ PATH_MATCH_THRESHOLD: float = 0.3
 # Score multiplier for migration data files (0001_initial.py etc.)
 MIGRATION_SCORE_PENALTY: float = 0.3
 
-# Score multiplier for short keyword-heavy chunks
-SHORT_CHUNK_PENALTY: float = 0.4
+# Score multiplier for short chunks (imports, tiny classes, configs).
+# These rarely contain cross-file reasoning context.
+SHORT_CHUNK_PENALTY: float = 0.5
 
 # Score multiplier for boilerplate __init__.py files
 BOILERPLATE_PENALTY: float = 0.5
 
 # Token threshold below which a chunk is considered "short"
-SHORT_CHUNK_TOKEN_THRESHOLD: int = 10
+SHORT_CHUNK_TOKEN_THRESHOLD: int = 30
 
 # --- Dynamic retrieval-k by query mode ---
 
@@ -96,13 +97,23 @@ CROSS_FILE_RETRIEVAL_K: int = 55
 # retrieval_k for feature-scoped queries
 FEATURE_RETRIEVAL_K: int = 45
 
+# --- Path-based scoring ---
+
+# Weight for IDF-weighted path-component matching.  When a query token
+# prefix-matches a file path component, the chunk gets a boost proportional
+# to the token's IDF.  Higher IDF = rarer term = stronger boost.
+PATH_BOOST_WEIGHT: float = 0.15
+
 # --- Sibling chunk expansion ---
 
 # Max sibling chunks added per file
-MAX_SIBLINGS_PER_FILE: int = 2
+MAX_SIBLINGS_PER_FILE: int = 3
 
 # Max total expansion chunks across all files
-MAX_EXPANSION_TOTAL: int = 8
+MAX_EXPANSION_TOTAL: int = 12
 
-# Minimum hybrid score for a sibling to be eligible
-SIBLING_MIN_SCORE: float = 0.10
+# Minimum hybrid score for a sibling to be eligible.
+# Lowered from 0.10 to 0.01: when a file is already represented in results,
+# adjacent chunks are very likely relevant even with low individual scores
+# (e.g. authenticate() next to login() in the same auth module).
+SIBLING_MIN_SCORE: float = 0.01

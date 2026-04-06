@@ -53,7 +53,7 @@ class RefinementMode:
 MODES = {
     "implementation": RefinementMode("implementation", 5, 2.0, 0.5, 1000, 2, 0.0),
     "decision": RefinementMode("decision", 4, 1.5, 0.7, 800, 1, 0.6),
-    "cross_file": RefinementMode("cross_file", 6, 1.8, 0.6, 900, 3, 0.3),
+    "cross_file": RefinementMode("cross_file", 6, 1.8, 0.6, 2000, 3, 0.3),
     "feature": RefinementMode("feature", 3, 1.5, 0.7, 800, 2, 0.0),
     "security": RefinementMode("security", 4, 1.5, 0.7, 800, 2, 0.3),
     "balanced": RefinementMode("balanced", 3, 1.5, 0.7, 800, 2, 0.0),
@@ -177,12 +177,16 @@ def refine(
     if mode.name == "cross_file":
         token_budget = max(token_budget, CROSS_FILE_TOKEN_BUDGET)
 
-        # Scale budget by input file diversity
-        input_files = {c.resource.locator for c in chunks if c.resource}
-        if len(input_files) >= 6:
-            token_budget = max(token_budget, 7000)
-        elif len(input_files) >= 4:
-            token_budget = max(token_budget, 6000)
+    # Scale budget by input file diversity (all modes).
+    # When retrieval surfaces chunks from many files, a tight budget
+    # forces the output to drop entire files, losing cross-file facts.
+    input_files = {c.resource.locator for c in chunks if c.resource}
+    if len(input_files) >= 6:
+        token_budget = max(token_budget, 7000)
+    elif len(input_files) >= 4:
+        token_budget = max(token_budget, 6000)
+    elif len(input_files) >= 3:
+        token_budget = max(token_budget, 5000)
 
     # Step 2: Classify and resolve metadata
     for chunk in chunks:
@@ -363,51 +367,75 @@ def refine(
     # Step 8: Merge and rank by confidence * retrieval_score
     items.sort(key=lambda x: x.confidence * x.retrieval_score, reverse=True)
 
-    # Step 9: Truncate oversized items (mode-specific limit)
+    # Step 9: Truncate oversized items.
+    # Passthrough items (confidence=2.0) get a higher limit — they are raw
+    # hybrid-scored chunks kept precisely to preserve recall.  Truncating
+    # them to 800 tokens destroys the content they were selected for.
+    passthrough_limit = max(mode.max_item_tokens, token_budget // 2)
     for item in items:
+        limit = passthrough_limit if item.confidence >= 2.0 else mode.max_item_tokens
         item_tokens = _count_tokens(item.text)
-        if item_tokens > mode.max_item_tokens:
+        if item_tokens > limit:
             words = item.text.split()
-            item.text = " ".join(words[: mode.max_item_tokens])
+            item.text = " ".join(words[:limit])
 
-    # Step 10: Cap by max_items and token_budget (whichever hits first)
-    if mode.name == "cross_file":
-        # Phase A: File-diversity guarantee — first unseen-file item goes first
-        seen_files: set[str] = set()
-        diversity_items: list[RefinedItem] = []
-        remainder_items: list[RefinedItem] = []
-        for item in items:
+    # Step 10: Cap by token_budget using skip-and-pack for all modes.
+    #
+    # Passthrough items (confidence >= 2.0) are the recall insurance — they
+    # were selected specifically to preserve the facts hybrid retrieval found.
+    # They MUST be included before diversity filling, otherwise the diversity
+    # mechanism fills all slots with one-per-file small chunks and pushes
+    # large, information-rich passthrough items into the remainder.
+    passthrough_final: list[RefinedItem] = []
+    non_passthrough: list[RefinedItem] = []
+    seen_files: set[str] = set()
+    for item in items:
+        if item.confidence >= 2.0:
+            passthrough_final.append(item)
             src = _get_item_source_file(item, text_units_by_id, resources_by_id)
-            if src and src not in seen_files:
+            if src:
                 seen_files.add(src)
-                diversity_items.append(item)
-            else:
-                remainder_items.append(item)
+        else:
+            non_passthrough.append(item)
 
-        # Phase B: Fill budget — diversity items first, then remainder
-        # Use `continue` not `break` — skip large items, keep packing small ones
-        budget_items: list[RefinedItem] = []
-        running_tokens = 0
-        for item in diversity_items + remainder_items:
-            item_tokens = _count_tokens(item.text)
-            if budget_items and running_tokens + item_tokens > token_budget:
-                continue  # skip this item, try smaller ones
-            budget_items.append(item)
-            running_tokens += item_tokens
-            if len(budget_items) >= max_items:
-                break
-    else:
-        # Original greedy for non-cross_file modes
-        budget_items: list[RefinedItem] = []
-        running_tokens = 0
-        for item in items:
-            item_tokens = _count_tokens(item.text)
-            if budget_items and running_tokens + item_tokens > token_budget:
-                break
-            budget_items.append(item)
-            running_tokens += item_tokens
-            if len(budget_items) >= max_items:
-                break
+    # File-diversity from non-passthrough items (new files only).
+    # Prioritise files that share a directory with passthrough files —
+    # they are likely part of the same call chain.
+    passthrough_dirs = {str(Path(f).parent) for f in seen_files}
+    diversity_items: list[RefinedItem] = []
+    remainder_items: list[RefinedItem] = []
+    for item in non_passthrough:
+        src = _get_item_source_file(item, text_units_by_id, resources_by_id)
+        if src and src not in seen_files:
+            seen_files.add(src)
+            diversity_items.append(item)
+        else:
+            remainder_items.append(item)
+
+    # Sort diversity: same-directory-as-passthrough files first, then rest.
+    # Within each group, keep existing ranking order (confidence * score).
+    nearby_div: list[RefinedItem] = []
+    faraway_div: list[RefinedItem] = []
+    for item in diversity_items:
+        src = _get_item_source_file(item, text_units_by_id, resources_by_id)
+        if src and str(Path(src).parent) in passthrough_dirs:
+            nearby_div.append(item)
+        else:
+            faraway_div.append(item)
+    diversity_items = nearby_div + faraway_div
+
+    # Fill budget — passthrough first, then diversity, then remainder.
+    # Use `continue` not `break` — skip large items, keep packing small ones.
+    budget_items: list[RefinedItem] = []
+    running_tokens = 0
+    for item in passthrough_final + diversity_items + remainder_items:
+        item_tokens = _count_tokens(item.text)
+        if budget_items and running_tokens + item_tokens > token_budget:
+            continue  # skip this item, try smaller ones
+        budget_items.append(item)
+        running_tokens += item_tokens
+        if len(budget_items) >= max_items:
+            break
     items = budget_items
 
     # Empty extraction fallback
