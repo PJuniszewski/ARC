@@ -26,7 +26,7 @@ Output includes: project type, files scanned, claims extracted, artifact path, e
 Build a single-file `.arc` archive from a source directory.
 
 ```bash
-arc build <source_dir> --out <path> [--id ID] [--version VERSION] [--parent ARCHIVE]
+arc build <source_dir> --out <path> [--id ID] [--version VERSION] [--parent ARCHIVE] [--extract-with-llm] [--yes]
 ```
 
 ### `arc inspect`
@@ -47,7 +47,7 @@ arc verify <archive> [--json]
 Resolve and mount archive content for a task or explicit layer set.
 
 ```bash
-arc load <archive> [--task TASK] [--layer NAME] [--type TYPE] [--source SOURCE] [--raw] [--code] [--ext EXT]
+arc load <archive> [--task TASK] [--layer NAME] [--type TYPE] [--source SOURCE] [--raw] [--code] [--ext EXT] [--full]
 ```
 
 Filter flags:

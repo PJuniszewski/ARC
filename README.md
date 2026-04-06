@@ -145,8 +145,8 @@ Source -> Builder -> .arc artifact -> Loader -> Agent runtime
 - **Merge**: combine parallel outputs, flag conflicting decisions
 
 **Extraction guarantees:**
-- **Deterministic** — same source produces identical claims and digests. No LLM in the extraction loop.
-- **Rule-based** — regex pattern matching + AST-aware chunking per language. No probabilistic extraction.
+- **Deterministic (default)** — same source produces identical claims and digests. Rule-based extraction, no LLM.
+- **LLM-assisted (opt-in)** — `--extract-with-llm` sends full files to LLM for richer claims. Trades determinism for 100% recall.
 - **Reproducible** — content-addressed storage means builds are verifiable. Rebuild from source, compare digests.
 - **Tamper-detected** — 100% detection rate on single-byte flips, blob deletion, manifest modification (tested exhaustively).
 
@@ -225,7 +225,7 @@ Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs
 ## Development
 
 ```bash
-make test              # 440+ tests
+make test              # 442 tests
 make lint              # ruff
 make benchmark-smoke   # FastAPI benchmark
 ```

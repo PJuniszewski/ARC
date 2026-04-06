@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arc-context"
-version = "1.0.0"
+version = "1.2.0"
 description = "ARC (Agent Reasoning Context) — portable, verifiable context packaging for AI agents"
 license = "Apache-2.0"
 readme = "README.md"

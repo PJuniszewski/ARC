@@ -91,13 +91,16 @@ Claims are the atomic unit of context in ARC. Each claim is a typed assertion wi
 
 ### Full build: `arc build`
 
-Builds an archive from a source directory. Scans files, chunks them into text units, extracts claims using pattern matching, generates embeddings for search.
+Builds an archive from a source directory.
 
 ```bash
-arc build ./src --out review.arc --id arc://myproject/review
+arc build ./src --out review.arc                    # rule-based extraction
+arc build ./src --out review.arc --extract-with-llm # LLM-assisted (richer claims)
 ```
 
-This is for when you want to capture everything from a codebase. The builder extracts observations automatically — all claims will have `source: "builder"`.
+**Rule-based (default):** regex pattern matching, signature claims for all functions, class summaries. Deterministic, no API key needed. Claims have `source: "builder"`.
+
+**LLM-assisted (opt-in):** sends full files to LLM for comprehensive claims covering error handling, cross-function flow, exceptions. Claims have `source: "llm-extracted"`. Requires API key.
 
 ### Snapshot: `arc snapshot`
 
@@ -232,10 +235,10 @@ arc diff review.arc fixes.arc
 | Command | Purpose |
 |---------|---------|
 | `arc init [dir] [--json]` | Detect project, generate config, build first `.arc` |
-| `arc build <dir> --out <path>` | Build single-file `.arc` from source |
+| `arc build <dir> --out <path> [--extract-with-llm]` | Build `.arc` (rule-based or LLM-assisted) |
 | `arc snapshot <archive> --out <path> --last N` | Create lightweight snapshot |
 | `arc merge <a> <b> --out <path>` | Merge two archives |
-| `arc load <archive> [--type T] [--source S] [--task Q]` | Load and query archive |
+| `arc load <archive> [--type T] [--source S] [--task Q] [--full]` | Load and query archive |
 | `arc inspect <archive>` | Display archive metadata and layers |
 | `arc verify <archive>` | Verify archive integrity |
 | `arc diff <a> <b>` | Compare two archives |

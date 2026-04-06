@@ -274,7 +274,10 @@ Template for decision objects.
 ## Source code
 
 ### `src/arc/builder.py`
-8-stage build pipeline: ingest → normalize → chunk → extract → deduplicate → index → assemble → validate.
+8-stage build pipeline. Rule-based extraction by default. Optional LLM-assisted full-file extraction with `--extract-with-llm`. Generates signature claims for ALL functions + class summary claims.
+
+### `src/arc/llm_extractor.py`
+LLM-assisted claim extraction. Sends full files (not chunks) for richer claims covering error handling, cross-function flow, call chains. Supports Anthropic and OpenAI via urllib.
 
 ### `src/arc/loader.py`
 Selective loading with hybrid vector + keyword scoring, evidence graph expansion, multi-hop BFS.

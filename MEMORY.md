@@ -9,9 +9,9 @@ It is intentionally short, practical, and updated often.
 
 **Project name:** ARC (Agent Reasoning Context)
 **Purpose:** portable, verifiable context packaging for AI agents
-**Current stage:** working implementation with 181 tests, evaluation harness, production quality gate
+**Current stage:** v1.2.0 — single-file archives, arc init, LLM extraction, 100% self-hosted recall
 **Primary environment:** Claude Code
-**Test status:** 384 pass, 2 skip (LLM-dependent without API key)
+**Test status:** 442 pass, 2 skip
 
 ---
 
@@ -39,7 +39,8 @@ ARC proposes a better model:
 
 ### Builder (8-stage pipeline)
 - Ingest → Normalize → Chunk → Extract → Deduplicate → Index → Assemble → Validate
-- Rule-based claim extraction with section heading enrichment
+- Rule-based extraction (default): regex patterns + section heading enrichment + signature claims for ALL functions + class summary claims
+- LLM-assisted extraction (opt-in `--extract-with-llm`): full-file extraction, 100% recall on self-hosted benchmark
 - Injection detection (5 regex patterns → confidence penalty + contested status)
 - Dual embedder: sentence-transformers (all-MiniLM-L6-v2, 384d) with TF-IDF fallback (256d)
 - Embedder state serialized in archive for aligned restore at load time
