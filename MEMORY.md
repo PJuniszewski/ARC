@@ -114,7 +114,6 @@ ARC proposes a better model:
 - OCI artifact mapping (designed for local-first → OCI later)
 - Three-way / recursive merge (two-way only for now)
 - Semantic dedup across agents (text-exact only, no embedding-based claim dedup)
-- `arc build` reading `.arcconfig` defaults (arc init writes it, build ignores it)
 - Sandboxed executable layers (explicitly deferred from v0; operational layers are declarative-only)
 
 ---
@@ -170,8 +169,8 @@ Define trust model — threat model documented, CAS integrity implemented, **sig
 ### Priority 7 (done)
 ~~Single-file packaging~~ — SQLite-backed `.arc` files as default output. `SqliteCAS` with same interface as directory CAS. `open_cas()` auto-detects format. Random access via indexed queries.
 
-### Priority 8 (next)
-Wire `.arcconfig` into `arc build` — currently arc init writes config but arc build ignores it. Should load scan dirs, ignore patterns, embedder choice from `.arcconfig` when present.
+### Priority 8 (done)
+~~Wire `.arcconfig` into `arc build`~~ — `arc build` reads `.arcconfig` when present (embeddings, project name). CLI flags override. Prints config source to stderr.
 
 ### Priority 9 (when someone asks)
 Signatures and attestations — cryptographic proof of who built the archive. Spec at `docs/provenance-signing.md`. `source` field is self-reported for now.
