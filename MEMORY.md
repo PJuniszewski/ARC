@@ -164,10 +164,16 @@ Define trust model — threat model documented, CAS integrity implemented, **sig
 ~~Agent-to-agent context passing~~ — typed claims, snapshot, merge, create, protocol docs
 
 ### Priority 6 (next)
-Signatures and attestations — implement the trust chain from `docs/provenance-signing.md`
+`arc init` — scan a project and generate a sensible first `.arc` with defaults. Without this, onboarding is "read docs and guess flags". Should detect language, pick embedder, set archive ID from repo name, and produce a working archive in one command.
 
 ### Priority 7
-Distribution — OCI mapping, single-file packaging, registry integration
+Single-file packaging — `.arc` as one file (tar.gz or zip) that you can drop into a repo, CI artifact, or Slack. Directory-based archives are fine for dev but nobody will adopt a format that produces 15 files. Design: `arc pack project.arc/ -o project.arc.gz` / `arc unpack project.arc.gz`.
+
+### Priority 8 (when someone asks)
+Signatures and attestations — cryptographic proof of who built the archive. Spec exists at `docs/provenance-signing.md`. Currently the `source` field on claims is self-reported. Signatures would make it verifiable. Not blocking adoption — local-first usage doesn't need them.
+
+### Priority 9
+Distribution — OCI mapping, registry integration. Depends on single-file packaging.
 
 ---
 
