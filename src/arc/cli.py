@@ -96,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     init_parser.add_argument("project_dir", nargs="?", default=".", help="Project directory")
     init_parser.add_argument("--name", default=None, help="Project name override")
     init_parser.add_argument("--no-build", action="store_true", help="Only generate config, skip build")
+    init_parser.add_argument("--json", action="store_true", dest="json_output",
+                             help="Structured JSON output (for agent consumption)")
 
     # arc restore
     restore_parser = subparsers.add_parser("restore", help="Restore source files from archive")
@@ -435,16 +437,25 @@ def _cmd_diff(args) -> int:
 
 
 def _cmd_init(args) -> int:
+    import os
     import time
     from pathlib import Path
 
     from .builder import build_archive
-    from .init import detect_project, estimate_size, generate_example_queries, pick_defaults, write_arcconfig
+    from .init import (
+        detect_project, estimate_size, extract_top_claims,
+        generate_heuristic_queries, generate_llm_queries,
+        pick_defaults, write_arcconfig,
+    )
     from .loader import load
 
+    json_mode = getattr(args, "json_output", False)
     project_dir = Path(args.project_dir).resolve()
     if not project_dir.is_dir():
-        print(f"Error: {project_dir} is not a directory", file=sys.stderr)
+        if json_mode:
+            print(json.dumps({"error": f"{project_dir} is not a directory"}))
+        else:
+            print(f"Error: {project_dir} is not a directory", file=sys.stderr)
         return 1
 
     # Detect project
@@ -452,14 +463,16 @@ def _cmd_init(args) -> int:
     if args.name:
         info["name"] = args.name
 
-    print(f"Detected: {info['type']} project \"{info['name']}\"")
-    if info["markers"]:
-        print(f"  Markers: {', '.join(info['markers'])}")
+    if not json_mode:
+        print(f"Detected: {info['type']} project \"{info['name']}\"")
+        if info["markers"]:
+            print(f"  Markers: {', '.join(info['markers'])}")
 
     # Estimate size
     t0 = time.monotonic()
     size = estimate_size(project_dir)
-    print(f"  Files: {size['files']:,}  Lines: {size['lines']:,}  ({size['bytes'] / 1024:.0f} KB)")
+    if not json_mode:
+        print(f"  Files: {size['files']:,}  Lines: {size['lines']:,}  ({size['bytes'] / 1024:.0f} KB)")
 
     # Pick defaults
     defaults = pick_defaults(info["type"], size, project_dir)
@@ -467,19 +480,20 @@ def _cmd_init(args) -> int:
 
     # Write .arcconfig
     config_path = project_dir / ".arcconfig"
-    if config_path.exists():
+    if not json_mode and config_path.exists():
         print("\n  .arcconfig already exists — overwriting")
     write_arcconfig(config, config_path)
-    print(f"  Config: {config_path}")
-    print(f"  Scan: {', '.join(config['scan'])}")
-    print(f"  Embeddings: {config['embeddings']}")
+    if not json_mode:
+        print(f"  Config: {config_path}")
+        print(f"  Scan: {', '.join(config['scan'])}")
+        print(f"  Embeddings: {config['embeddings']}")
 
     if args.no_build:
-        print("\n  Skipping build (--no-build)")
+        if not json_mode:
+            print("\n  Skipping build (--no-build)")
         return 0
 
-    # Build — use primary source dir. If only one scan dir, use it directly.
-    # If multiple or '.', build from root (builder's skip patterns handle filtering).
+    # Build — use primary source dir if only one, else root
     scan_dirs = config["scan"]
     if len(scan_dirs) == 1 and scan_dirs[0] != ".":
         source = str(project_dir / scan_dirs[0])
@@ -488,40 +502,78 @@ def _cmd_init(args) -> int:
 
     archive_path = project_dir / f"{info['name']}.arc"
     force_tfidf = config["embeddings"] == "tfidf"
+    archive_name = archive_path.name
 
-    print(f"\n  Building {archive_path.name} from {scan_dirs[0]}/ ...")
+    if not json_mode:
+        print(f"\n  Building {archive_name} from {scan_dirs[0]}/ ...")
 
-    def _progress(stage, detail):
-        elapsed = time.monotonic() - t0
-        print(f"    [{stage}] {detail}  ({elapsed:.1f}s)", file=sys.stderr, flush=True)
+    progress_cb = None
+    if not json_mode:
+        def progress_cb(stage, detail):
+            elapsed = time.monotonic() - t0
+            print(f"    [{stage}] {detail}  ({elapsed:.1f}s)", file=sys.stderr, flush=True)
 
     result = build_archive(
         source_dir=source,
         output_dir=str(archive_path),
         archive_id=f"arc://{info['name']}",
         force_tfidf=force_tfidf,
-        on_progress=_progress,
+        on_progress=progress_cb,
         output_format="sqlite",
     )
     elapsed = time.monotonic() - t0
 
     if not result.valid:
-        print(f"\n  Build failed: {result.errors}", file=sys.stderr)
+        if json_mode:
+            print(json.dumps({"error": f"Build failed: {result.errors}"}))
+        else:
+            print(f"\n  Build failed: {result.errors}", file=sys.stderr)
         return 1
 
-    archive_size = archive_path.stat().st_size
-    print(f"\n  Archive: {archive_path.name} ({archive_size / 1024:.0f} KB)")
+    archive_size_kb = archive_path.stat().st_size / 1024
+
+    # Load for claim analysis
+    loaded = load(str(archive_path))
+
+    # --- Mode 1: JSON output (for agents) ---
+    if json_mode:
+        top_claims = extract_top_claims(loaded.claims) if not loaded.rejected else []
+        output = {
+            "project": info["name"],
+            "language": info["type"],
+            "files_scanned": len(result.resources),
+            "claims_extracted": len(result.claims),
+            "decisions_extracted": len(result.decisions),
+            "artifact": archive_name,
+            "artifact_size_kb": round(archive_size_kb),
+            "build_time_s": round(elapsed, 1),
+            "top_claims": top_claims,
+        }
+        print(json.dumps(output, indent=2))
+        return 0
+
+    # --- Human output ---
+    print(f"\n  Archive: {archive_name} ({archive_size_kb:.0f} KB)")
     print(f"  Resources: {len(result.resources)}")
     print(f"  Claims: {len(result.claims)}")
     print(f"  Time: {elapsed:.1f}s")
 
-    # Generate example queries
-    loaded = load(str(archive_path))
-    if not loaded.rejected:
-        queries = generate_example_queries(loaded.claims, loaded.resources)
-        print("\n  Try these:")
-        for q in queries:
-            print(f"    {q}")
+    if loaded.rejected:
+        return 0
+
+    # --- Mode 2: LLM-generated queries (API key available) ---
+    has_api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    queries = None
+    if has_api_key:
+        queries = generate_llm_queries(loaded.claims, archive_name)
+
+    # --- Mode 3: Heuristic fallback ---
+    if queries is None:
+        queries = generate_heuristic_queries(loaded.claims, archive_name)
+
+    print("\n  Try these:")
+    for q in queries:
+        print(f"    {q}")
 
     return 0
 

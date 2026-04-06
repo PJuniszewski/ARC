@@ -239,43 +239,184 @@ def read_arcconfig(path: Path) -> dict:
     return config
 
 
-def generate_example_queries(claims: list, resources: list) -> list[str]:
-    """Generate 3 example queries from actual archive content."""
+def extract_top_claims(claims: list, n: int = 10) -> list[dict]:
+    """Extract the top N most informative claims as dicts for structured output.
+
+    Prefers high-confidence claims with evidence, diverse by source file.
+    """
+    scored = []
+    for c in claims:
+        text = getattr(c, "text", str(c))
+        if len(text) < 20:
+            continue
+        conf = getattr(c, "confidence", 0.5)
+        has_evidence = bool(getattr(c, "evidence", []))
+        ctype = getattr(c, "claim_type", "observation")
+        # Score: prefer high confidence, with evidence, non-trivial length
+        score = conf + (0.2 if has_evidence else 0) + min(len(text) / 200, 0.3)
+        # Boost decisions and dependencies (more interesting than observations)
+        if ctype in ("decision", "dependency"):
+            score += 0.15
+
+        source_file = ""
+        evidence = getattr(c, "evidence", [])
+        derived = getattr(c, "derived_from", "")
+        if evidence:
+            source_file = getattr(evidence[0], "source_unit_id", "")[:16]
+        elif derived:
+            source_file = derived[:16]
+
+        scored.append((score, {
+            "type": ctype,
+            "text": text[:200],
+            "confidence": round(conf, 2),
+            "source_file": source_file,
+        }))
+
+    scored.sort(key=lambda x: -x[0])
+
+    # Deduplicate by keeping diverse source files
+    seen_prefixes: set[str] = set()
+    result = []
+    for _, item in scored:
+        prefix = item["text"][:40].lower()
+        if prefix in seen_prefixes:
+            continue
+        seen_prefixes.add(prefix)
+        result.append(item)
+        if len(result) >= n:
+            break
+
+    return result
+
+
+def _extract_names_from_claims(claims: list) -> list[str]:
+    """Extract class and function names mentioned in claims."""
+    names: dict[str, int] = {}
+    # Match CamelCase class names and snake_case function names
+    for c in claims[:100]:
+        text = getattr(c, "text", str(c))
+        # CamelCase: ContentAddressedStore, BuildResult, etc.
+        for m in re.findall(r"\b([A-Z][a-z]+(?:[A-Z][a-z]+)+)\b", text):
+            names[m] = names.get(m, 0) + 1
+        # snake_case functions: build_archive, extract_claims, etc.
+        for m in re.findall(r"\b([a-z]+_[a-z_]+)\b", text):
+            if len(m) > 5 and m not in {"source_unit", "claim_type", "archive_path",
+                                          "text_unit", "derived_from", "source_ref"}:
+                names[m] = names.get(m, 0) + 1
+
+    return [name for name, _ in sorted(names.items(), key=lambda x: -x[1])[:10]]
+
+
+def generate_heuristic_queries(claims: list, archive_name: str = "*.arc") -> list[str]:
+    """Mode 3: generate queries from class/function names in claims."""
+    names = _extract_names_from_claims(claims)
     queries = []
 
-    # Strategy 1: find the most referenced topic from claims
-    word_freq: dict[str, int] = {}
-    stop = {"the", "is", "are", "was", "has", "have", "and", "for", "with", "this",
-            "that", "from", "all", "not", "but", "its", "can", "should", "must",
-            "will", "each", "any", "into", "via", "per", "may", "such", "also",
-            "uses", "used", "using", "provides", "provides", "based", "when"}
-    for c in claims[:50]:
-        text = getattr(c, "text", str(c))
-        for word in re.findall(r"\b[a-z]{4,}\b", text.lower()):
-            if word not in stop:
-                word_freq[word] = word_freq.get(word, 0) + 1
+    for name in names[:3]:
+        if name[0].isupper():
+            queries.append(f'arc load {archive_name} --task "How does {name} work"')
+        else:
+            readable = name.replace("_", " ")
+            queries.append(f'arc load {archive_name} --task "What does {readable} do"')
 
-    top_words = sorted(word_freq.items(), key=lambda x: -x[1])[:10]
-
-    # Strategy 2: extract key modules from resource locators
-    modules = set()
-    for r in resources[:30]:
-        loc = getattr(r, "locator", str(r))
-        parts = Path(loc).parts
-        if len(parts) >= 2:
-            modules.add(parts[0] if parts[0] != "." else parts[1] if len(parts) > 1 else "")
-
-    # Generate queries
-    if top_words:
-        queries.append(f'arc load *.arc --task "how does {top_words[0][0]} work"')
-    if len(top_words) >= 3:
-        queries.append(f'arc load *.arc --task "{top_words[1][0]} and {top_words[2][0]}"')
-    if modules:
-        mod = sorted(modules)[0]
-        queries.append(f'arc load *.arc --task "explain the {mod} module"')
-
-    # Fallback
     while len(queries) < 3:
-        queries.append('arc load *.arc --task "project architecture overview"')
+        queries.append(f'arc load {archive_name} --task "project architecture overview"')
 
     return queries[:3]
+
+
+def generate_llm_queries(
+    claims: list, archive_name: str = "*.arc", timeout: float = 5.0
+) -> Optional[list[str]]:
+    """Mode 2: use cheap LLM API call to generate queries. Returns None on failure."""
+    top = extract_top_claims(claims, n=15)
+    if not top:
+        return None
+
+    facts = "\n".join(f"- [{c['type']}] {c['text']}" for c in top)
+    prompt = (
+        "Given these facts extracted from a codebase, suggest exactly 3 specific "
+        "questions a developer would ask. Concrete, answerable from the code, not "
+        "about setup or installation. Return only the 3 questions, one per line.\n\n"
+        f"Facts:\n{facts}"
+    )
+
+    # Try Anthropic first, then OpenAI
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if api_key:
+        result = _call_anthropic(prompt, api_key, timeout)
+        if result:
+            return _format_llm_queries(result, archive_name)
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if api_key:
+        result = _call_openai(prompt, api_key, timeout)
+        if result:
+            return _format_llm_queries(result, archive_name)
+
+    return None
+
+
+def _call_anthropic(prompt: str, api_key: str, timeout: float) -> Optional[str]:
+    """Call Anthropic Messages API with urllib (no SDK dependency)."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    body = _json.dumps({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 500,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read())
+            return data.get("content", [{}])[0].get("text", "")
+    except Exception:
+        return None
+
+
+def _call_openai(prompt: str, api_key: str, timeout: float) -> Optional[str]:
+    """Call OpenAI Chat API with urllib (no SDK dependency)."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    body = _json.dumps({
+        "model": "gpt-4o-mini",
+        "max_tokens": 500,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read())
+            return data["choices"][0]["message"]["content"]
+    except Exception:
+        return None
+
+
+def _format_llm_queries(text: str, archive_name: str) -> list[str]:
+    """Parse LLM response into arc load commands."""
+    lines = [line.strip().lstrip("0123456789.-) ") for line in text.strip().splitlines()]
+    lines = [l for l in lines if l and len(l) > 10]
+    return [f'arc load {archive_name} --task "{q}"' for q in lines[:3]]
