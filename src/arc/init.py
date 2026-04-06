@@ -239,11 +239,47 @@ def read_arcconfig(path: Path) -> dict:
     return config
 
 
-def extract_top_claims(claims: list, n: int = 10) -> list[dict]:
+def _resolve_source_file(
+    claim: object, su_by_id: dict, res_by_id: dict
+) -> str:
+    """Resolve a claim's evidence to an actual file path."""
+    evidence = getattr(claim, "evidence", [])
+    derived = getattr(claim, "derived_from", "")
+
+    su_id = ""
+    if evidence:
+        su_id = getattr(evidence[0], "source_unit_id", "")
+    elif derived:
+        su_id = derived
+
+    if su_id and su_id in su_by_id:
+        su = su_by_id[su_id]
+        res_id = getattr(su, "resource_id", "")
+        if res_id in res_by_id:
+            return getattr(res_by_id[res_id], "locator", "")
+
+    return ""
+
+
+def extract_top_claims(
+    claims: list,
+    n: int = 10,
+    source_units: list | None = None,
+    resources: list | None = None,
+) -> list[dict]:
     """Extract the top N most informative claims as dicts for structured output.
 
     Prefers high-confidence claims with evidence, diverse by source file.
+    When source_units and resources are provided, resolves actual file paths.
     """
+    # Build lookup tables for file path resolution
+    su_by_id: dict[str, object] = {}
+    res_by_id: dict[str, object] = {}
+    if source_units:
+        su_by_id = {getattr(s, "id", ""): s for s in source_units}
+    if resources:
+        res_by_id = {getattr(r, "id", ""): r for r in resources}
+
     scored = []
     for c in claims:
         text = getattr(c, "text", str(c))
@@ -258,13 +294,8 @@ def extract_top_claims(claims: list, n: int = 10) -> list[dict]:
         if ctype in ("decision", "dependency"):
             score += 0.15
 
-        source_file = ""
-        evidence = getattr(c, "evidence", [])
-        derived = getattr(c, "derived_from", "")
-        if evidence:
-            source_file = getattr(evidence[0], "source_unit_id", "")[:16]
-        elif derived:
-            source_file = derived[:16]
+        # Resolve source file path
+        source_file = _resolve_source_file(c, su_by_id, res_by_id)
 
         scored.append((score, {
             "type": ctype,

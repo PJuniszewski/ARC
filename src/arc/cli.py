@@ -537,7 +537,9 @@ def _cmd_init(args) -> int:
 
     # --- Mode 1: JSON output (for agents) ---
     if json_mode:
-        top_claims = extract_top_claims(loaded.claims) if not loaded.rejected else []
+        top_claims = extract_top_claims(
+            loaded.claims, source_units=loaded.source_units, resources=loaded.resources
+        ) if not loaded.rejected else []
         output = {
             "project": info["name"],
             "language": info["type"],

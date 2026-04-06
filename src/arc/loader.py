@@ -154,9 +154,11 @@ def verify(archive_path: str | Path) -> VerificationResult:
     """Verify archive integrity — digests, schema, references."""
     try:
         cas = open_cas(Path(archive_path))
+        return cas.verify_archive()
     except FileNotFoundError:
         return VerificationResult(valid=False, errors=[f"Archive not found: {archive_path}"])
-    return cas.verify_archive()
+    except Exception as e:
+        return VerificationResult(valid=False, errors=[f"Cannot read archive: {e}"])
 
 
 def load(
@@ -185,9 +187,20 @@ def load(
         result.rejected = True
         result.reason = f"Archive not found: {archive_path}"
         return result
+    except Exception as e:
+        result = LoadedArchive(manifest=Manifest(), archive_path=str(archive_path))
+        result.rejected = True
+        result.reason = f"Cannot read archive: {e}"
+        return result
 
     # Read and validate manifest
-    manifest = read_manifest_from_cas(cas)
+    try:
+        manifest = read_manifest_from_cas(cas)
+    except Exception as e:
+        result = LoadedArchive(manifest=Manifest(), archive_path=str(archive_path))
+        result.rejected = True
+        result.reason = f"Cannot read archive: {e}"
+        return result
     if manifest is None:
         result = LoadedArchive(manifest=Manifest(), archive_path=str(archive_path))
         result.rejected = True
