@@ -32,12 +32,10 @@ Either A dumps raw text into B's prompt (noisy, unverifiable) or B rebuilds cont
 
 ARC turns agent context into structured, verifiable artifacts:
 
-```mermaid
-graph LR
-    A[Agent A] -->|produces| ARC1[review.arc]
-    ARC1 -->|"arc load --type decision"| B[Agent B]
-    B -->|produces| ARC2[fixes.arc]
-    ARC2 -->|traceable back to| ARC1
+```
+Agent A ──produces──> review.arc ──arc load --type decision──> Agent B
+                                                                  │
+Agent B ──produces──> fixes.arc ──traceable back to──> review.arc
 ```
 
 Every claim in an ARC artifact has a **type**, **source**, **evidence**, and **confidence**. Nothing is opaque text.
@@ -106,80 +104,64 @@ arc diff review.arc fixes.arc                          # compare artifacts
 
 ### Sequential handoff
 
-```mermaid
-sequenceDiagram
-    participant A as Agent A (Reviewer)
-    participant ARC as .arc artifact
-    participant B as Agent B (Implementer)
-
-    A->>A: Review codebase
-    A->>ARC: arc create review.arc
-    Note over ARC: observations + decisions<br/>+ uncertainties + dependencies
-    ARC->>B: arc load --type decision
-    B->>B: Act on decisions
-    B->>ARC: arc create fixes.arc
-    Note over ARC: fixes reference review.arc<br/>claim IDs for traceability
+```
+Agent A (Reviewer)                    Agent B (Implementer)
+       │                                      │
+       ├── review codebase                    │
+       ├── observations + decisions           │
+       ╰──> review.arc                        │
+                 │                             │
+                 ╰── arc load --type decision ─╯
+                                               │
+                                   act on decisions
+                                   produce fixes.arc
+                                               │
+              review.arc <── references ── fixes.arc
 ```
 
 ### Parallel merge
 
-```mermaid
-sequenceDiagram
-    participant C as Agent C (Security)
-    participant D as Agent D (Performance)
-    participant M as arc merge
-    participant E as Agent E (Resolver)
-
-    par Parallel reviews
-        C->>C: security.arc
-        D->>D: performance.arc
-    end
-    C->>M: security.arc
-    D->>M: performance.arc
-    M->>M: Observations coexist<br/>Conflicting decisions flagged
-    M->>E: combined.arc
-    E->>E: arc load --type conflict
-    E->>E: Resolve disagreements
+```
+Agent C (Security)     Agent D (Performance)
+       │                        │
+  security.arc            performance.arc
+       │                        │
+       ╰────── arc merge ───────╯
+                    │
+              combined.arc
+                    │
+         observations coexist
+         conflicts flagged
+                    │
+              Agent E loads
+         arc load --type conflict
+            resolves disputes
 ```
 
 ---
 
 ## Full pipeline
 
-```mermaid
-graph TB
-    subgraph "Build"
-        SRC[Source files] --> ING[Ingest]
-        ING --> CHK[Chunk]
-        CHK --> EXT[Extract claims]
-        EXT --> DED[Deduplicate]
-        DED --> IDX[Embed + Index]
-        IDX --> ASM[Assemble]
-        ASM --> ART[".arc artifact"]
-    end
-
-    subgraph "Artifact"
-        ART --> MAN[manifest.json]
-        ART --> BLB[blobs/sha256/...]
-        ART --> REF[refs/provenance.json]
-    end
-
-    subgraph "Consume"
-        ART --> VER{arc verify}
-        VER -->|valid| LOAD[arc load]
-        LOAD --> FILT[Filter by type/source/task]
-        FILT --> AGENT[Agent runtime]
-    end
-
-    subgraph "Multi-agent"
-        ART --> SNAP[arc snapshot]
-        SNAP --> HAND[Handoff to next agent]
-        ART --> MERGE[arc merge]
-        MERGE --> COMBINED[Combined artifact]
-        COMBINED --> CONFLICTS{Conflicts?}
-        CONFLICTS -->|yes| RESOLVE[Agent resolves]
-        CONFLICTS -->|no| AGENT
-    end
+```
+                        ┌─── Build ───────────────────────┐
+                        │                                  │
+  Source files ──> Ingest ──> Chunk ──> Extract claims     │
+                        │         ──> Deduplicate          │
+                        │         ──> Embed + Index        │
+                        │         ──> Assemble ──> .arc    │
+                        └──────────────────────────────────┘
+                                                  │
+                ┌─── Consume ─────────────────────┤
+                │                                  │
+           arc verify                        arc snapshot
+                │                                  │
+           arc load                          handoff.arc
+                │                                  │
+     filter by type/source/task            arc merge a.arc b.arc
+                │                                  │
+          Agent runtime                    combined.arc
+                                                   │
+                                        conflicts? ──> resolve
 ```
 
 ---
