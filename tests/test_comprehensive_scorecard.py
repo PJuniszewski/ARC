@@ -374,14 +374,13 @@ class TestComprehensiveScorecard:
         tamper_total = len(blobs)
 
         for digest in blobs:
-            blob_path = cas.blobs_dir / digest
-            original = blob_path.read_bytes()
+            original = cas.retrieve_blob(digest)
             tampered = bytearray(original)
             tampered[0] = (tampered[0] + 1) % 256
-            blob_path.write_bytes(bytes(tampered))
+            cas._test_tamper_blob(digest, bytes(tampered))
             if not cas.verify_archive().valid:
                 tamper_detected += 1
-            blob_path.write_bytes(original)
+            cas._test_tamper_blob(digest, original)
 
         tamper_rate = tamper_detected / tamper_total if tamper_total else 0.0
 

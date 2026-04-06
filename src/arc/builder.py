@@ -12,7 +12,7 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-from .cas import ContentAddressedStore, sha256_digest
+from .cas import create_cas, open_cas, sha256_digest
 from .compressor import DeduplicationResult, deduplicate_claims
 from .embeddings import VectorStore, get_embedder
 from .extractor import extract_claims, extract_decisions, extract_policies, extract_tools, extract_workflow
@@ -59,6 +59,7 @@ def build_archive(
     parent_archive: Optional[str | Path] = None,
     force_tfidf: bool = False,
     on_progress: Optional[Callable[[str, str], None]] = None,
+    output_format: str = "directory",
 ) -> BuildResult:
     """Build an ARC archive from source directory.
 
@@ -86,13 +87,12 @@ def build_archive(
         archive_id = f"arc://{source_dir.name}"
 
     # Initialize CAS
-    cas = ContentAddressedStore(output_dir)
-    cas.initialize()
+    cas = create_cas(output_dir, fmt=output_format)
 
     # Load parent CAS for incremental builds
     parent_cas = None
     if parent_archive:
-        parent_cas = ContentAddressedStore(Path(parent_archive))
+        parent_cas = open_cas(Path(parent_archive))
 
     # Initialize provenance
     provenance = BuildProvenance(parameters={

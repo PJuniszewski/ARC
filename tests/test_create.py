@@ -2,7 +2,7 @@
 
 import pytest
 
-from arc.cas import ContentAddressedStore
+from arc.cas import open_cas
 from arc.create import create_archive
 from arc.loader import load
 from arc.models import Claim, Decision, EvidencePointer, Resource, TextUnit
@@ -29,7 +29,7 @@ class TestCreateArchive:
         claims = [Claim(text="test claim", source="agent-x")]
         create_archive(str(out), claims)
 
-        cas = ContentAddressedStore(out)
+        cas = open_cas(out)
         assert cas.verify_archive().valid
 
     def test_create_with_source_stamp(self, tmp_path):

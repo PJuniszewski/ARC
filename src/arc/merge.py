@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .assembly import assemble_archive, validate_evidence
-from .cas import ContentAddressedStore
+from .cas import create_cas
 from .embeddings import get_embedder
 from .models import Claim, Decision, Manifest, Resource, TextUnit, _generate_id
 
@@ -148,8 +148,7 @@ def merge(
 
     # --- Assemble ---
     out = Path(output_path)
-    cas = ContentAddressedStore(out)
-    cas.initialize()
+    cas = create_cas(out)
 
     manifest = assemble_archive(
         cas=cas,

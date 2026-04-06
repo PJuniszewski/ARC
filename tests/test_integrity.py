@@ -33,13 +33,12 @@ class TestTamperDetection:
 
         for blob_digest in blobs:
             # Create tampered copy
-            blob_path = cas.blobs_dir / blob_digest
-            original = blob_path.read_bytes()
+            original = cas.retrieve_blob(blob_digest)
 
             # Flip one byte
             tampered = bytearray(original)
             tampered[0] = (tampered[0] + 1) % 256
-            blob_path.write_bytes(bytes(tampered))
+            cas._test_tamper_blob(blob_digest, bytes(tampered))
 
             # Verify should fail
             result = cas.verify_archive()
@@ -47,7 +46,7 @@ class TestTamperDetection:
                 detections += 1
 
             # Restore original
-            blob_path.write_bytes(original)
+            cas._test_tamper_blob(blob_digest, original)
 
         detection_rate = detections / total
         assert detection_rate == 1.0, (
@@ -60,52 +59,49 @@ class TestTamperDetection:
         cas = ContentAddressedStore(tmp_archive)
         blobs = cas.list_blobs()
 
-        blob_path = cas.blobs_dir / blobs[0]
-        original = blob_path.read_bytes()
+        original = cas.retrieve_blob(blobs[0])
 
         # Flip single bit in middle of content
         tampered = bytearray(original)
         mid = len(tampered) // 2
         tampered[mid] ^= 0x01  # flip lowest bit
-        blob_path.write_bytes(bytes(tampered))
+        cas._test_tamper_blob(blobs[0], bytes(tampered))
 
         result = cas.verify_archive()
         assert not result.valid, "Single bit flip was NOT detected"
 
         # Restore
-        blob_path.write_bytes(original)
+        cas._test_tamper_blob(blobs[0], original)
 
     def test_blob_replacement_detected(self, built_archive, tmp_archive):
         """Academic: Replacing a blob with entirely different content is detected."""
         cas = ContentAddressedStore(tmp_archive)
         blobs = cas.list_blobs()
 
-        blob_path = cas.blobs_dir / blobs[0]
-        original = blob_path.read_bytes()
+        original = cas.retrieve_blob(blobs[0])
 
         # Replace with completely different content
-        blob_path.write_bytes(b'{"malicious": "payload", "claims": []}')
+        cas._test_tamper_blob(blobs[0], b'{"malicious": "payload", "claims": []}')
 
         result = cas.verify_archive()
         assert not result.valid
 
-        blob_path.write_bytes(original)
+        cas._test_tamper_blob(blobs[0], original)
 
     def test_blob_deletion_detected(self, built_archive, tmp_archive):
         """Academic: Deleting a blob is detected as missing."""
         cas = ContentAddressedStore(tmp_archive)
         blobs = cas.list_blobs()
 
-        blob_path = cas.blobs_dir / blobs[0]
-        original = blob_path.read_bytes()
-        blob_path.unlink()
+        original = cas.retrieve_blob(blobs[0])
+        cas._test_delete_blob(blobs[0])
 
         result = cas.verify_archive()
         assert not result.valid
         assert len(result.missing_blobs) > 0 or len(result.failed_digests) > 0
 
         # Restore
-        blob_path.write_bytes(original)
+        cas._test_tamper_blob(blobs[0], original)
 
 
 class TestManifestIntegrity:
@@ -113,38 +109,38 @@ class TestManifestIntegrity:
 
     def test_modified_manifest_digest(self, built_archive, tmp_archive):
         """Academic: Changing any manifest field invalidates root_digest."""
-        manifest_path = tmp_archive / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        cas = ContentAddressedStore(tmp_archive)
+        manifest = cas.read_manifest()
 
         # Modify archive version
         original_version = manifest["archive_version"]
         manifest["archive_version"] = "9.9.9"
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+        cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
         result = verify(tmp_archive)
         assert not result.valid
 
         # Restore
         manifest["archive_version"] = original_version
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+        cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
     def test_modified_layer_digest_in_manifest(self, built_archive, tmp_archive):
         """Academic: Changing a layer digest in manifest is detected."""
-        manifest_path = tmp_archive / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        cas = ContentAddressedStore(tmp_archive)
+        manifest = cas.read_manifest()
 
         # Change first layer digest
         if manifest["layers"]:
             manifest["layers"][0]["digest"] = "0" * 64  # fake digest
-            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+            cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
             result = verify(tmp_archive)
             assert not result.valid
 
     def test_added_layer_invalidates_manifest(self, built_archive, tmp_archive):
         """Academic: Adding a layer without updating root_digest is detected."""
-        manifest_path = tmp_archive / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        cas = ContentAddressedStore(tmp_archive)
+        manifest = cas.read_manifest()
 
         manifest["layers"].append({
             "name": "injected",
@@ -154,7 +150,7 @@ class TestManifestIntegrity:
             "depends_on": [],
             "media_type": "application/arc+json",
         })
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+        cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
         result = verify(tmp_archive)
         assert not result.valid
@@ -221,15 +217,14 @@ class TestIntegritySummary:
         # 2. Tamper and detect
         cas = ContentAddressedStore(archive_path)
         blobs = cas.list_blobs()
-        blob_path = cas.blobs_dir / blobs[0]
-        original = blob_path.read_bytes()
-        blob_path.write_bytes(b"tampered")
+        original = cas.retrieve_blob(blobs[0])
+        cas._test_tamper_blob(blobs[0], b"tampered")
 
         v = verify(archive_path)
         assert not v.valid, "Tampered archive should fail verification"
 
         # Restore
-        blob_path.write_bytes(original)
+        cas._test_tamper_blob(blobs[0], original)
 
         # 3. Verify restored
         v = verify(archive_path)

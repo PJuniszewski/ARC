@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .assembly import assemble_archive
-from .cas import ContentAddressedStore
+from .cas import create_cas
 from .models import Claim, Decision, Manifest, Resource, TextUnit, ToolDeclaration, PolicyRule, WorkflowStep
 
 
@@ -62,8 +62,7 @@ def create_archive(
                     d.source = source
 
     out = Path(output_path)
-    cas = ContentAddressedStore(out)
-    cas.initialize()
+    cas = create_cas(out)
 
     return assemble_archive(
         cas=cas,

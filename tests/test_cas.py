@@ -62,8 +62,7 @@ class TestContentAddressedStore:
 
         digest = cas.store_blob(b"original")
         # Tamper with the blob
-        blob_path = cas.blobs_dir / digest
-        blob_path.write_bytes(b"tampered")
+        cas._test_tamper_blob(digest, b"tampered")
         assert cas.verify_blob(digest) is False
 
     def test_verify_blob_missing(self, tmp_path):
@@ -141,7 +140,7 @@ class TestContentAddressedStore:
         cas.write_manifest(manifest)
 
         # Tamper
-        (cas.blobs_dir / digest).write_bytes(b"tampered")
+        cas._test_tamper_blob(digest, b"tampered")
         result = cas.verify_archive()
         assert not result.valid
         assert digest in result.failed_digests

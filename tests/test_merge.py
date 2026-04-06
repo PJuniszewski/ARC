@@ -5,7 +5,7 @@ import json
 import pytest
 
 from arc.builder import build_archive
-from arc.cas import ContentAddressedStore
+from arc.cas import ContentAddressedStore, open_cas
 from arc.loader import load
 from arc.manifest import read_manifest_from_cas, write_manifest_to_cas
 from arc.merge import merge
@@ -90,7 +90,7 @@ class TestMerge:
         out = tmp_path / "merged.arc"
         result, manifest = merge(a, b, str(out))
 
-        cas = ContentAddressedStore(out)
+        cas = open_cas(out)
         verification = cas.verify_archive()
         assert verification.valid
 

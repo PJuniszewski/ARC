@@ -107,12 +107,12 @@ class TestBuildPipeline:
 
 class TestCLI:
     def test_build_command(self, corpus_dir, tmp_path):
-        """CLI build command works."""
+        """CLI build command produces a single-file archive."""
         from arc.cli import main
         out = tmp_path / "cli_test.arc"
         ret = main(["build", str(corpus_dir), "--out", str(out)])
         assert ret == 0
-        assert (out / "manifest.json").exists()
+        assert out.is_file()  # SQLite single file
 
     def test_inspect_command(self, built_archive, tmp_archive):
         """CLI inspect command works."""

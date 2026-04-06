@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from arc.builder import build_archive
-from arc.cas import ContentAddressedStore
+from arc.cas import ContentAddressedStore, open_cas
 from arc.diff import diff_archives
 from arc.loader import load
 from arc.manifest import read_manifest_from_cas, write_manifest_to_cas
@@ -298,7 +298,7 @@ class TestParallelMerge:
         # --- Verify ---
 
         # 1. Combined archive is valid
-        cas = ContentAddressedStore(combined_path)
+        cas = open_cas(combined_path)
         assert cas.verify_archive().valid
 
         # 2. All observations from both agents are present

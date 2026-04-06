@@ -255,12 +255,11 @@ class TestEvaluationHarness:
         tamper_cas = ContentAddressedStore(tamper_archive)
         blobs = tamper_cas.list_blobs()
         if blobs:
-            blob_path = tamper_cas.blobs_dir / blobs[0]
-            original = blob_path.read_bytes()
-            blob_path.write_bytes(b"TAMPERED")
+            original = tamper_cas.retrieve_blob(blobs[0])
+            tamper_cas._test_tamper_blob(blobs[0], b"TAMPERED")
             tamper_v = verify(tamper_archive)
             report.tamper_detected = not tamper_v.valid
-            blob_path.write_bytes(original)
+            tamper_cas._test_tamper_blob(blobs[0], original)
 
         assert report.tamper_detected, "Tamper was NOT detected"
 

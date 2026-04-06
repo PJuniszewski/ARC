@@ -35,32 +35,32 @@ def _tamper_strategies(cas: ContentAddressedStore) -> list[tuple[str, callable]]
     strategies = []
 
     for i, digest in enumerate(blobs):
-        blob_path = cas.blobs_dir / digest
+        d = digest  # capture for closures
 
         # Strategy 1: Single byte flip (minimal change)
-        def flip_byte(path=blob_path):
-            data = bytearray(path.read_bytes())
+        def flip_byte(_cas=cas, _d=d):
+            data = bytearray(_cas.retrieve_blob(_d))
             data[0] = (data[0] + 1) % 256
             return bytes(data)
         strategies.append((f"byte_flip_{digest[:8]}", flip_byte))
 
         # Strategy 2: Append data (size change)
-        def append_data(path=blob_path):
-            return path.read_bytes() + b"\n{\"injected\": true}"
+        def append_data(_cas=cas, _d=d):
+            return _cas.retrieve_blob(_d) + b"\n{\"injected\": true}"
         strategies.append((f"append_{digest[:8]}", append_data))
 
         # Strategy 3: Replace with valid-looking JSON
-        def replace_json(path=blob_path):
+        def replace_json(_cas=cas, _d=d):
             return json.dumps({"claims": [], "version": "evil"}).encode()
         strategies.append((f"replace_{digest[:8]}", replace_json))
 
         # Strategy 4: Truncate
-        def truncate(path=blob_path):
-            return path.read_bytes()[:10]
+        def truncate(_cas=cas, _d=d):
+            return _cas.retrieve_blob(_d)[:10]
         strategies.append((f"truncate_{digest[:8]}", truncate))
 
         # Strategy 5: Empty content
-        def empty(path=blob_path):
+        def empty(_cas=cas, _d=d):
             return b""
         strategies.append((f"empty_{digest[:8]}", empty))
 
@@ -138,12 +138,11 @@ class TestTamperDetectionRate:
                 continue
 
             blob_digest = matching[0]
-            blob_path = cas.blobs_dir / blob_digest
-            original = blob_path.read_bytes()
+            original = cas.retrieve_blob(blob_digest)
 
             try:
                 tampered = tamper_fn()
-                blob_path.write_bytes(tampered)
+                cas._test_tamper_blob(blob_digest, tampered)
 
                 v = cas.verify_archive()
                 if not v.valid:
@@ -151,7 +150,7 @@ class TestTamperDetectionRate:
                 else:
                     failures.append(name)
             finally:
-                blob_path.write_bytes(original)
+                cas._test_tamper_blob(blob_digest, original)
 
         detection_rate = detections / total if total > 0 else 0
         assert detection_rate == 1.0, (
@@ -168,8 +167,8 @@ class TestTamperDetectionRate:
         result = build_archive(corpus_dir, archive_path)
         assert result.valid
 
-        manifest_path = archive_path / "manifest.json"
-        original_manifest = json.loads(manifest_path.read_text())
+        cas = ContentAddressedStore(archive_path)
+        original_manifest = cas.read_manifest()
 
         fields_to_tamper = [
             ("archive_id", "arc://evil"),
@@ -181,14 +180,14 @@ class TestTamperDetectionRate:
         for field_name, evil_value in fields_to_tamper:
             manifest = dict(original_manifest)
             manifest[field_name] = evil_value
-            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+            cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
             v = verify(archive_path)
             if not v.valid:
                 detections += 1
 
             # Restore
-            manifest_path.write_text(json.dumps(original_manifest, indent=2, sort_keys=True))
+            cas._test_write_manifest_raw(json.dumps(original_manifest, indent=2, sort_keys=True))
 
         assert detections == len(fields_to_tamper), (
             f"Only {detections}/{len(fields_to_tamper)} manifest tamperings detected"
@@ -362,14 +361,13 @@ class TestSecurityMetricsSummary:
         tamper_detected = 0
         tamper_total = len(blobs)
         for digest in blobs:
-            blob_path = cas.blobs_dir / digest
-            original = blob_path.read_bytes()
+            original = cas.retrieve_blob(digest)
             tampered = bytearray(original)
             tampered[0] = (tampered[0] + 1) % 256
-            blob_path.write_bytes(bytes(tampered))
+            cas._test_tamper_blob(digest, bytes(tampered))
             if not cas.verify_archive().valid:
                 tamper_detected += 1
-            blob_path.write_bytes(original)
+            cas._test_tamper_blob(digest, original)
 
         tamper_rate = tamper_detected / tamper_total if tamper_total else 0
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cas import ContentAddressedStore
+from .cas import open_cas
 from .loader import load
 from .models import Claim, Decision, PolicyRule, ToolDeclaration, WorkflowStep
 
@@ -85,8 +85,8 @@ def diff_archives(
     archive_b: str | Path,
 ) -> DiffResult:
     """Compare two archives structurally and semantically."""
-    cas_a = ContentAddressedStore(Path(archive_a))
-    cas_b = ContentAddressedStore(Path(archive_b))
+    cas_a = open_cas(Path(archive_a))
+    cas_b = open_cas(Path(archive_b))
 
     result = DiffResult()
 

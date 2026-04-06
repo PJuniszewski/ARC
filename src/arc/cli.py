@@ -41,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("--id", default=None, help="Archive ID")
     build_parser.add_argument("--version", default="1.0.0", help="Archive version")
     build_parser.add_argument("--parent", default=None, help="Parent archive for incremental build")
+    build_parser.add_argument("--format", default="sqlite", choices=["sqlite", "directory"],
+                              help="Archive format (default: sqlite single-file)")
 
     # arc inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect archive contents")
@@ -89,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     diff_parser.add_argument("archive_b", help="Second archive")
     diff_parser.add_argument("--json", action="store_true", help="JSON output")
 
+    # arc init
+    init_parser = subparsers.add_parser("init", help="Initialize ARC for a project")
+    init_parser.add_argument("project_dir", nargs="?", default=".", help="Project directory")
+    init_parser.add_argument("--name", default=None, help="Project name override")
+    init_parser.add_argument("--no-build", action="store_true", help="Only generate config, skip build")
+
     # arc restore
     restore_parser = subparsers.add_parser("restore", help="Restore source files from archive")
     restore_parser.add_argument("archive", help="Archive path")
@@ -108,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         "snapshot": _cmd_snapshot,
         "merge": _cmd_merge,
         "diff": _cmd_diff,
+        "init": _cmd_init,
         "restore": _cmd_restore,
     }
     handler = dispatch.get(args.command)
@@ -150,6 +159,7 @@ def _cmd_build(args) -> int:
         archive_version=args.version,
         parent_archive=args.parent,
         on_progress=_on_progress,
+        output_format=getattr(args, "format", "sqlite"),
     )
 
     elapsed = time.monotonic() - t0
@@ -172,10 +182,10 @@ def _cmd_build(args) -> int:
 
 
 def _cmd_inspect(args) -> int:
-    from .cas import ContentAddressedStore
+    from .cas import open_cas
     from .manifest import read_manifest_from_cas
 
-    cas = ContentAddressedStore(Path(args.archive))
+    cas = open_cas(Path(args.archive))
     manifest = read_manifest_from_cas(cas)
 
     if manifest is None:
@@ -207,9 +217,9 @@ def _cmd_inspect(args) -> int:
 
 
 def _cmd_verify(args) -> int:
-    from .cas import ContentAddressedStore
+    from .cas import open_cas
 
-    cas = ContentAddressedStore(Path(args.archive))
+    cas = open_cas(Path(args.archive))
     result = cas.verify_archive()
 
     if getattr(args, "json", False):
@@ -420,6 +430,98 @@ def _cmd_diff(args) -> int:
         print(json.dumps(result.to_dict(), indent=2))
     else:
         print(result.summary())
+
+    return 0
+
+
+def _cmd_init(args) -> int:
+    import time
+    from pathlib import Path
+
+    from .builder import build_archive
+    from .init import detect_project, estimate_size, generate_example_queries, pick_defaults, write_arcconfig
+    from .loader import load
+
+    project_dir = Path(args.project_dir).resolve()
+    if not project_dir.is_dir():
+        print(f"Error: {project_dir} is not a directory", file=sys.stderr)
+        return 1
+
+    # Detect project
+    info = detect_project(project_dir)
+    if args.name:
+        info["name"] = args.name
+
+    print(f"Detected: {info['type']} project \"{info['name']}\"")
+    if info["markers"]:
+        print(f"  Markers: {', '.join(info['markers'])}")
+
+    # Estimate size
+    t0 = time.monotonic()
+    size = estimate_size(project_dir)
+    print(f"  Files: {size['files']:,}  Lines: {size['lines']:,}  ({size['bytes'] / 1024:.0f} KB)")
+
+    # Pick defaults
+    defaults = pick_defaults(info["type"], size, project_dir)
+    config = {**info, **defaults}
+
+    # Write .arcconfig
+    config_path = project_dir / ".arcconfig"
+    if config_path.exists():
+        print("\n  .arcconfig already exists — overwriting")
+    write_arcconfig(config, config_path)
+    print(f"  Config: {config_path}")
+    print(f"  Scan: {', '.join(config['scan'])}")
+    print(f"  Embeddings: {config['embeddings']}")
+
+    if args.no_build:
+        print("\n  Skipping build (--no-build)")
+        return 0
+
+    # Build — use primary source dir. If only one scan dir, use it directly.
+    # If multiple or '.', build from root (builder's skip patterns handle filtering).
+    scan_dirs = config["scan"]
+    if len(scan_dirs) == 1 and scan_dirs[0] != ".":
+        source = str(project_dir / scan_dirs[0])
+    else:
+        source = str(project_dir)
+
+    archive_path = project_dir / f"{info['name']}.arc"
+    force_tfidf = config["embeddings"] == "tfidf"
+
+    print(f"\n  Building {archive_path.name} from {scan_dirs[0]}/ ...")
+
+    def _progress(stage, detail):
+        elapsed = time.monotonic() - t0
+        print(f"    [{stage}] {detail}  ({elapsed:.1f}s)", file=sys.stderr, flush=True)
+
+    result = build_archive(
+        source_dir=source,
+        output_dir=str(archive_path),
+        archive_id=f"arc://{info['name']}",
+        force_tfidf=force_tfidf,
+        on_progress=_progress,
+        output_format="sqlite",
+    )
+    elapsed = time.monotonic() - t0
+
+    if not result.valid:
+        print(f"\n  Build failed: {result.errors}", file=sys.stderr)
+        return 1
+
+    archive_size = archive_path.stat().st_size
+    print(f"\n  Archive: {archive_path.name} ({archive_size / 1024:.0f} KB)")
+    print(f"  Resources: {len(result.resources)}")
+    print(f"  Claims: {len(result.claims)}")
+    print(f"  Time: {elapsed:.1f}s")
+
+    # Generate example queries
+    loaded = load(str(archive_path))
+    if not loaded.rejected:
+        queries = generate_example_queries(loaded.claims, loaded.resources)
+        print("\n  Try these:")
+        for q in queries:
+            print(f"    {q}")
 
     return 0
 

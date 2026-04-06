@@ -5,7 +5,7 @@ import json
 import pytest
 
 from arc.builder import build_archive
-from arc.cas import ContentAddressedStore
+from arc.cas import ContentAddressedStore, open_cas
 from arc.loader import load
 from arc.manifest import read_manifest_from_cas, write_manifest_to_cas
 from arc.models import Claim, EvidencePointer, Layer
@@ -101,7 +101,7 @@ class TestSnapshot:
         snap_path = tmp_path / "snap.arc"
         snapshot(source_archive, str(snap_path), last=3)
 
-        cas = ContentAddressedStore(snap_path)
+        cas = open_cas(snap_path)
         result = cas.verify_archive()
         assert result.valid
 

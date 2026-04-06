@@ -10,7 +10,7 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 # Public API
 from .builder import BuildResult, build_archive
-from .cas import ContentAddressedStore, VerificationResult, sha256_digest
+from .cas import ContentAddressedStore, SqliteCAS, VerificationResult, create_cas, open_cas, sha256_digest
 from .create import create_archive
 from .diff import diff_archives
 from .merge import merge
@@ -36,7 +36,10 @@ __all__ = [
     "BuildResult",
     # CAS
     "ContentAddressedStore",
+    "SqliteCAS",
     "VerificationResult",
+    "create_cas",
+    "open_cas",
     "sha256_digest",
     # Create
     "create_archive",

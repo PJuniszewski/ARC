@@ -26,8 +26,7 @@ class TestVerification:
         assert len(blobs) > 0
 
         # Corrupt first blob
-        blob_path = cas.blobs_dir / blobs[0]
-        blob_path.write_bytes(b"corrupted data")
+        cas._test_tamper_blob(blobs[0], b"corrupted data")
 
         result = verify(tmp_archive)
         assert not result.valid

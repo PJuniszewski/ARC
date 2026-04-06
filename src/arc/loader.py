@@ -11,7 +11,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-from .cas import ContentAddressedStore, VerificationResult
+from .cas import VerificationResult, open_cas
 from .embeddings import TfidfEmbedder, VectorStore, get_embedder
 from .manifest import read_manifest_from_cas, validate_manifest
 from .config import (
@@ -152,7 +152,10 @@ class LoadedArchive:
 
 def verify(archive_path: str | Path) -> VerificationResult:
     """Verify archive integrity — digests, schema, references."""
-    cas = ContentAddressedStore(Path(archive_path))
+    try:
+        cas = open_cas(Path(archive_path))
+    except FileNotFoundError:
+        return VerificationResult(valid=False, errors=[f"Archive not found: {archive_path}"])
     return cas.verify_archive()
 
 
@@ -175,7 +178,13 @@ def load(
         source: Filter claims by source agent ID
     """
     archive_path = Path(archive_path)
-    cas = ContentAddressedStore(archive_path)
+    try:
+        cas = open_cas(archive_path)
+    except FileNotFoundError:
+        result = LoadedArchive(manifest=Manifest(), archive_path=str(archive_path))
+        result.rejected = True
+        result.reason = f"Archive not found: {archive_path}"
+        return result
 
     # Read and validate manifest
     manifest = read_manifest_from_cas(cas)
@@ -462,7 +471,7 @@ def restore_sources(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cas = ContentAddressedStore(archive_path)
+    cas = open_cas(archive_path)
     manifest = read_manifest_from_cas(cas)
     if manifest is None:
         return {"restored_files": [], "total_bytes": 0, "error": "Missing manifest"}

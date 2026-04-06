@@ -134,11 +134,10 @@ class TestTamperDetection:
         blobs = cas.list_blobs()
         assert len(blobs) > 0
 
-        blob_path = cas.blobs_dir / blobs[0]
-        data = blob_path.read_bytes()
+        data = cas.retrieve_blob(blobs[0])
         # Flip one byte
         tampered = bytes([data[0] ^ 0xFF]) + data[1:]
-        blob_path.write_bytes(tampered)
+        cas._test_tamper_blob(blobs[0], tampered)
 
         v = verify(arc_dir)
         assert not v.valid
@@ -157,7 +156,7 @@ class TestTamperDetection:
         cas = ContentAddressedStore(arc_dir)
         blobs = cas.list_blobs()
         # Delete the first blob
-        (cas.blobs_dir / blobs[0]).unlink()
+        cas._test_delete_blob(blobs[0])
 
         v = verify(arc_dir)
         assert not v.valid
@@ -174,10 +173,10 @@ class TestTamperDetection:
         assert result.valid
 
         # Tamper with manifest
-        manifest_path = arc_dir / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        cas = ContentAddressedStore(arc_dir)
+        manifest = cas.read_manifest()
         manifest["root_digest"] = "0" * 64  # bogus digest
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
+        cas._test_write_manifest_raw(json.dumps(manifest, indent=2, sort_keys=True))
 
         v = verify(arc_dir)
         assert not v.valid

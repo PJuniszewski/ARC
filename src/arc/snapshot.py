@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from .assembly import assemble_archive, validate_evidence
-from .cas import ContentAddressedStore
+from .cas import create_cas
 from .models import Manifest
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,7 @@ def snapshot(
 
     # Assemble
     out = Path(output_path)
-    cas = ContentAddressedStore(out)
-    cas.initialize()
+    cas = create_cas(out)
 
     return assemble_archive(
         cas=cas,
