@@ -16,43 +16,9 @@
 
 ## See it work
 
-```bash
-pip install arc-context
-arc init
-```
-
-```
-Detected: python project "auth-service"
-  Files: 42  Lines: 3,800
-
-  Building auth-service.arc ...
-  Claims: 187
-  Archive: auth-service.arc (240 KB)
-
-  Try these:
-    arc load auth-service.arc --task "How does AuthMiddleware work"
-```
-
-```bash
-arc load auth-service.arc --task "how does authentication work"
-```
-
-```
-  Query: how does authentication work
-  Results: 4 claims
-
-  1. [OBSERVATION] @builder  auth.py:1-18
-     AuthMiddleware handles JWT-based authentication for all API endpoints.
-
-  2. [OBSERVATION] @builder  auth.py:10-18
-     Tokens are verified for signature validity and expiration.
-
-  3. [OBSERVATION] @builder  README.md:8-13
-     The system uses RS256 algorithm for JWT signing.
-
-  4. [DEPENDENCY] @builder  auth.py:20-26
-     Rate limiting prevents abuse — requires valid JWT first.
-```
+<p align="center">
+  <img src="assets/demo.svg" alt="arc init + arc load demo" width="700">
+</p>
 
 Every result traces back to a **source file and line range**. Not a summary. Not a guess. A claim with evidence.
 
