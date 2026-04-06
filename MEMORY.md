@@ -30,11 +30,12 @@ ARC proposes a better model:
 
 ## What ARC currently is (implemented)
 
-### Archive format (directory-based CAS)
-- `manifest.json` — root entry point with `root_digest` integrity seal
-- `blobs/sha256/<digest>` — content-addressed blob storage
-- `refs/provenance.json` — build provenance
-- 7 layers: source-units, claims, decisions, embeddings + 3 optional operational (tools, policy, workflow)
+### Archive format (single-file SQLite, default)
+- Single `.arc` file: SQLite with `blobs(digest, data, size)` + `meta(key, value)` tables
+- Manifest, provenance, metadata stored in `meta` table
+- Random access to blobs by indexed digest lookup — no unpacking
+- Legacy directory format still supported via `open_cas()` auto-detection
+- 7+ layers: source-units, claims, decisions, embeddings, import-graph + 3 optional operational (tools, policy, workflow)
 
 ### Builder (8-stage pipeline)
 - Ingest → Normalize → Chunk → Extract → Deduplicate → Index → Assemble → Validate
@@ -109,11 +110,11 @@ ARC proposes a better model:
 
 ## What is not yet implemented
 
-- Signatures and attestations (spec exists at `docs/provenance-signing.md`)
+- Signatures and attestations (spec exists at `docs/provenance-signing.md`) — deprioritized, "when someone asks"
 - OCI artifact mapping (designed for local-first → OCI later)
-- Single-file packaging (currently directory only)
 - Three-way / recursive merge (two-way only for now)
 - Semantic dedup across agents (text-exact only, no embedding-based claim dedup)
+- `arc build` reading `.arcconfig` defaults (arc init writes it, build ignores it)
 - Sandboxed executable layers (explicitly deferred from v0; operational layers are declarative-only)
 
 ---
@@ -163,17 +164,20 @@ Define trust model — threat model documented, CAS integrity implemented, **sig
 ### Priority 5 (done)
 ~~Agent-to-agent context passing~~ — typed claims, snapshot, merge, create, protocol docs
 
-### Priority 6 (next)
-`arc init` — scan a project and generate a sensible first `.arc` with defaults. Without this, onboarding is "read docs and guess flags". Should detect language, pick embedder, set archive ID from repo name, and produce a working archive in one command.
+### Priority 6 (done)
+~~`arc init`~~ — project detection (Python/JS/TS/Go/Rust/Java), `.arcconfig` generation, first `.arc` build, three query modes (--json for agents, LLM, heuristic fallback)
 
-### Priority 7
-Single-file packaging — `.arc` as one file (tar.gz or zip) that you can drop into a repo, CI artifact, or Slack. Directory-based archives are fine for dev but nobody will adopt a format that produces 15 files. Design: `arc pack project.arc/ -o project.arc.gz` / `arc unpack project.arc.gz`.
+### Priority 7 (done)
+~~Single-file packaging~~ — SQLite-backed `.arc` files as default output. `SqliteCAS` with same interface as directory CAS. `open_cas()` auto-detects format. Random access via indexed queries.
 
-### Priority 8 (when someone asks)
-Signatures and attestations — cryptographic proof of who built the archive. Spec exists at `docs/provenance-signing.md`. Currently the `source` field on claims is self-reported. Signatures would make it verifiable. Not blocking adoption — local-first usage doesn't need them.
+### Priority 8 (next)
+Wire `.arcconfig` into `arc build` — currently arc init writes config but arc build ignores it. Should load scan dirs, ignore patterns, embedder choice from `.arcconfig` when present.
 
-### Priority 9
-Distribution — OCI mapping, registry integration. Depends on single-file packaging.
+### Priority 9 (when someone asks)
+Signatures and attestations — cryptographic proof of who built the archive. Spec at `docs/provenance-signing.md`. `source` field is self-reported for now.
+
+### Priority 10
+Distribution — OCI mapping, registry integration.
 
 ---
 

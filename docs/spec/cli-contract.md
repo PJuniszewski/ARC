@@ -8,8 +8,22 @@ The CLI should make ARC understandable and operable without making users reverse
 
 ## Commands
 
+### `arc init`
+Detect project type, generate `.arcconfig`, build first archive.
+
+```bash
+arc init [project_dir] [--name NAME] [--no-build] [--json]
+```
+
+Three modes:
+- `--json`: structured JSON output for agent consumption (top claims, no example queries)
+- Human + API key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`): LLM-generated example queries
+- Human, no key: heuristic queries from class/function names in claims
+
+Output includes: project type, files scanned, claims extracted, artifact path, example queries.
+
 ### `arc build`
-Build an archive from a source directory.
+Build a single-file `.arc` archive from a source directory.
 
 ```bash
 arc build <source_dir> --out <path> [--id ID] [--version VERSION] [--parent ARCHIVE]

@@ -106,10 +106,17 @@ Read when you need:
 
 ### `docs/spec/arc-format.md`
 Primary source for:
-- what an `.arc` is
-- package layout
+- what an `.arc` is (single-file SQLite or legacy directory)
+- package layout and schema
 - required sections
 - compatibility principles
+
+### `docs/single-file-format.md`
+Design document for SQLite-based single-file archives:
+- why SQLite over zip/tar
+- schema (blobs + meta tables)
+- random access and verification
+- migration from directory format
 
 ### `docs/spec/manifest-schema.md`
 Primary source for:
@@ -311,6 +318,9 @@ Structural and semantic diff between two archives.
 
 ### `src/arc/assembly.py`
 Shared archive assembly: serialize layers to CAS blobs. Used by snapshot, merge, and create. Includes evidence pointer validation.
+
+### `src/arc/init.py`
+Project detection, config generation, example query generation. Detects Python/JS/TS/Go/Rust/Java from marker files. Three query modes: --json (structured), LLM (API call), heuristic (class/function names).
 
 ### `src/arc/create.py`
 Programmatic archive creation from typed claims. No source directory needed. Primary API for agents producing artifacts.

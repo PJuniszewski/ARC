@@ -42,24 +42,31 @@ How the archive is represented on disk or in transport.
 
 ---
 
-## Recommended local layout
+## Package format
+
+### Single-file (canonical, default)
+
+A `.arc` file is a SQLite database with two tables:
+
+```sql
+blobs(digest TEXT PRIMARY KEY, data BLOB NOT NULL, size INTEGER NOT NULL)
+meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)
+-- meta keys: "manifest", "refs/provenance.json", "meta/inspect-cache.json"
+```
+
+Random access by digest via indexed lookup. No unpacking needed. See [`docs/single-file-format.md`](../single-file-format.md).
+
+### Directory (legacy, still supported)
 
 ```text
 project.arc/
 ├── manifest.json
-├── blobs/
-│   ├── sha256/
-│   │   ├── aa/...
-│   │   ├── bb/...
-│   │   └── ...
-├── refs/
-│   ├── provenance.json
-│   └── signatures.json
-└── meta/
-    └── inspect-cache.json
+├── blobs/sha256/<digest>
+├── refs/provenance.json
+└── meta/inspect-cache.json
 ```
 
-This can later map to a single-file package or OCI transport.
+`open_cas()` auto-detects file vs directory. Both formats have identical Merkle verification.
 
 ---
 
@@ -107,9 +114,9 @@ This can later map to a single-file package or OCI transport.
 
 ---
 
-## Open format questions
+## Resolved format questions
 
-- should single-file `.arc` be canonical or only a transport wrapper?
-- should blob serialization be JSON only in v0?
-- how strict should layer typing be across versions?
+- **Single-file is canonical.** SQLite is the default output format. Directory is legacy.
+- **Blob serialization is JSON in v0.** All layers serialized as JSON with `indent=2, sort_keys=True` for determinism.
+- **Layer typing is strict for required layers, lenient for optional.** Unknown optional layers are ignored.
 

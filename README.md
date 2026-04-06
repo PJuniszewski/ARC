@@ -71,7 +71,14 @@ pip install arc-context
 ### Build context from a codebase
 
 ```bash
-arc build ./src --out project.arc
+arc init                                               # detect project, build first .arc
+arc init --json                                        # structured output for agents
+```
+
+### Build and inspect
+
+```bash
+arc build ./src --out project.arc                      # produces single-file SQLite .arc
 arc inspect project.arc
 arc verify project.arc
 ```
@@ -215,7 +222,7 @@ Source -> Builder -> Artifact -> Loader -> Runtime
 ```
 
 - **Builder**: extracts typed claims from source (8-stage pipeline)
-- **Artifact**: content-addressed, Merkle-sealed `.arc` directory
+- **Artifact**: single-file SQLite `.arc` with Merkle integrity
 - **Loader**: selective loading with type/source/task filtering
 - **Snapshot**: lightweight subset for quick handoffs
 - **Merge**: combine parallel agent outputs, flag conflicts
@@ -228,7 +235,9 @@ Full design: [`docs/architecture.md`](docs/architecture.md) | Protocol: [`docs/p
 
 | Command | Purpose |
 |---------|---------|
-| `arc build <dir> --out <path>` | Build archive from source directory |
+| `arc init [dir]` | Detect project, generate config, build first `.arc` |
+| `arc init --json` | Structured output for agent consumption |
+| `arc build <dir> --out <path>` | Build single-file `.arc` from source |
 | `arc snapshot <arc> --out <path> --last N` | Lightweight subset for handoff |
 | `arc merge <a> <b> --out <path>` | Merge two archives, flag conflicts |
 | `arc load <arc> [--type T] [--source S] [--task Q]` | Load and query |

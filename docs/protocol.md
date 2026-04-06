@@ -6,24 +6,22 @@ This document is for anyone building an agent framework who wants to integrate A
 
 ## What is an ARC artifact?
 
-An `.arc` artifact is a directory containing:
+An `.arc` artifact is a single SQLite file containing all context, metadata, and integrity seals:
 
+```sql
+-- Two tables inside project.arc (SQLite)
+blobs(digest TEXT PRIMARY KEY, data BLOB, size INTEGER)  -- content-addressed layers
+meta(key TEXT PRIMARY KEY, value TEXT)                     -- manifest, provenance, metadata
 ```
-project.arc/
-├── manifest.json          # Root metadata, layer references, integrity seal
-├── blobs/sha256/          # Content-addressed blob storage
-│   ├── <sha256-digest>    # Each blob is immutable JSON
-│   └── ...
-├── refs/
-│   └── provenance.json    # Build provenance
-└── meta/                  # Optional inspection metadata
-```
+
+A legacy directory-based format is also supported (`open_cas()` auto-detects). See [`docs/single-file-format.md`](single-file-format.md) for the design.
 
 **Key properties:**
-- Content-addressed: every blob is stored by its SHA-256 digest
-- Manifest-driven: `manifest.json` lists all layers with their digests
-- Merkle-sealed: `root_digest` covers the entire manifest, making tampering detectable
-- Offline-verifiable: no network needed to check integrity
+- **Single file**: one `.arc` you can commit, share, attach to tickets
+- **Content-addressed**: every blob stored by SHA-256 digest
+- **Random access**: look up any blob by digest via indexed query — no unpacking
+- **Merkle-sealed**: `root_digest` covers the entire manifest, making tampering detectable
+- **Offline-verifiable**: no network needed to check integrity
 
 ## Claims
 
@@ -222,7 +220,7 @@ arc diff review.arc fixes.arc
 - **Blob integrity**: Every blob's SHA-256 digest matches its content. Tampering is detectable.
 - **Manifest integrity**: The `root_digest` covers the entire manifest. Any modification to layer references, archive ID, or version is caught.
 - **No missing blobs**: Every layer referenced in the manifest has a corresponding blob.
-- **Offline**: No external service needed. Everything verifiable from the directory contents.
+- **Offline**: No external service needed. Everything verifiable from the archive alone.
 
 ### What verification does not guarantee
 
@@ -233,7 +231,8 @@ arc diff review.arc fixes.arc
 
 | Command | Purpose |
 |---------|---------|
-| `arc build <dir> --out <path>` | Build archive from source directory |
+| `arc init [dir] [--json]` | Detect project, generate config, build first `.arc` |
+| `arc build <dir> --out <path>` | Build single-file `.arc` from source |
 | `arc snapshot <archive> --out <path> --last N` | Create lightweight snapshot |
 | `arc merge <a> <b> --out <path>` | Merge two archives |
 | `arc load <archive> [--type T] [--source S] [--task Q]` | Load and query archive |
@@ -285,5 +284,5 @@ Compare:   arc diff v1.arc v2.arc
 2. **Content-addressed.** Same content → same hash. Deduplication and subset detection are free.
 3. **Typed claims.** Not raw text. Every piece of context has a type, source, confidence, and evidence.
 4. **Selective loading.** Load only what you need. Filter by type, source, or semantic relevance.
-5. **Offline verification.** No external services. Check integrity from the directory alone.
+5. **Offline verification.** No external services. Check integrity from the archive alone.
 6. **Composable.** Build, snapshot, merge, load, diff, verify. Each command does one thing.
