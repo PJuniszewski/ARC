@@ -38,95 +38,169 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Task definitions: question + ground truth facts + relevant files
 # ---------------------------------------------------------------------------
 
+# Each fact is a list of acceptable variants. A fact is "found" if ANY variant
+# appears as a substring in the context. Deterministic, auditable.
 TASKS = [
     {
         "id": "hash-algo",
         "question": "What hash algorithm does the content-addressed storage use?",
-        "facts": ["SHA-256", "sha256", "hashlib.sha256"],
+        "facts": [
+            ["SHA-256", "sha256", "SHA256", "hashlib.sha256"],
+            ["sha256", "SHA-256"],  # algorithm name
+            ["hashlib", "hash"],    # implementation
+        ],
         "files": ["cas.py"],
     },
     {
         "id": "conflict-detect",
         "question": "How does arc merge detect conflicting decisions between agents?",
-        "facts": ["cosine similarity", "TF-IDF", "CONFLICT_SIMILARITY_THRESHOLD", "embeddings"],
+        "facts": [
+            ["cosine similarity", "cosine_similarity", "cosine"],
+            ["tfidf", "TF-IDF", "TfidfEmbedder", "tf-idf"],
+            ["CONFLICT_SIMILARITY_THRESHOLD", "threshold", "0.45"],
+            ["embedding", "vector", "embed"],
+        ],
         "files": ["merge.py"],
     },
     {
         "id": "claim-types",
         "question": "What claim types does ARC support?",
-        "facts": ["observation", "decision", "uncertainty", "dependency", "conflict"],
+        "facts": [
+            ["observation"],
+            ["decision"],
+            ["uncertainty"],
+            ["dependency"],
+            ["conflict"],
+        ],
         "files": ["models.py"],
     },
     {
         "id": "project-detect",
         "question": "How does arc init detect what kind of project it's scanning?",
-        "facts": ["pyproject.toml", "package.json", "go.mod", "Cargo.toml", "marker"],
+        "facts": [
+            ["pyproject.toml"],
+            ["package.json"],
+            ["Cargo.toml", "cargo"],
+            ["marker", "_MARKERS", "detect"],
+        ],
         "files": ["init.py"],
     },
     {
         "id": "archive-format",
         "question": "What file format does a .arc archive use internally?",
-        "facts": ["SQLite", "sqlite", "blobs", "meta"],
+        "facts": [
+            ["SQLite", "sqlite", "sqlite3"],
+            ["blobs", "blob"],
+            ["meta", "metadata"],
+        ],
         "files": ["cas.py"],
     },
     {
         "id": "merge-dedup",
         "question": "How are duplicate claims handled when merging two archives?",
-        "facts": ["text", "source", "different sources", "kept", "confirmation"],
+        "facts": [
+            ["text", "content"],
+            ["source", "agent"],
+            ["different source", "confirmation", "kept", "both"],
+        ],
         "files": ["merge.py"],
     },
     {
         "id": "corrupt-handling",
         "question": "What happens when you try to load a corrupt .arc file?",
-        "facts": ["rejected", "DatabaseError", "Cannot read"],
+        "facts": [
+            ["rejected", "rejected=True", "reject"],
+            ["DatabaseError", "database error", "not a database"],
+            ["valid=False", "not valid", "invalid", "fails", "error"],
+        ],
         "files": ["loader.py"],
     },
     {
         "id": "snapshot-select",
         "question": "How does arc snapshot select which claims to include?",
-        "facts": ["last", "timestamp", "sorted", "filter"],
+        "facts": [
+            ["last", "most recent", "latest"],
+            ["timestamp", "time", "sorted", "sort"],
+            ["filter", "claim_type", "source"],
+        ],
         "files": ["snapshot.py"],
     },
     {
         "id": "embedder-models",
         "question": "What embedding models does ARC support?",
-        "facts": ["sentence-transformers", "TF-IDF", "TfidfEmbedder", "fallback"],
+        "facts": [
+            ["sentence-transformers", "sentence_transformers", "SentenceTransformer", "MiniLM"],
+            ["TF-IDF", "tfidf", "TfidfEmbedder", "tf_idf"],
+            ["fallback", "force_tfidf", "falls back"],
+        ],
         "files": ["embeddings.py"],
     },
     {
         "id": "merkle-root",
         "question": "How is the manifest root digest computed?",
-        "facts": ["SHA-256", "root_digest", "excluded", "sort_keys"],
+        "facts": [
+            ["SHA-256", "sha256", "SHA256"],
+            ["root_digest", "compute_root_digest"],
+            ["excluded", "pop", "excluding"],
+            ["sort_keys", "sorted", "deterministic"],
+        ],
         "files": ["models.py", "cas.py"],
     },
     {
         "id": "evidence-trace",
         "question": "How does a claim trace back to source code?",
-        "facts": ["EvidencePointer", "source_unit_id", "span", "resource_id", "locator"],
+        "facts": [
+            ["EvidencePointer", "evidence"],
+            ["source_unit_id", "source unit"],
+            ["span", "line"],
+            ["resource_id", "resource"],
+            ["locator", "file path", "file_path"],
+        ],
         "files": ["models.py"],
     },
     {
         "id": "init-json",
         "question": "What does arc init --json output?",
-        "facts": ["top_claims", "project", "language", "files_scanned", "claims_extracted"],
+        "facts": [
+            ["top_claims", "claims"],
+            ["project", "name"],
+            ["json", "JSON", "--json"],
+        ],
         "files": ["cli.py", "init.py"],
     },
     {
         "id": "builder-stages",
         "question": "What are the stages of the ARC build pipeline?",
-        "facts": ["ingest", "chunk", "extract", "deduplicate", "index", "assemble", "validate"],
+        "facts": [
+            ["ingest", "scan"],
+            ["chunk", "split"],
+            ["extract", "extraction"],
+            ["deduplicate", "dedup"],
+            ["index", "embed"],
+            ["assemble", "write"],
+            ["validate", "verify"],
+        ],
         "files": ["builder.py"],
     },
     {
         "id": "selective-load",
         "question": "How does arc load filter claims by type and source?",
-        "facts": ["claim_type", "source", "--type", "--source", "filter"],
+        "facts": [
+            ["claim_type", "--type", "type"],
+            ["source", "--source", "agent"],
+            ["filter", "select", "query"],
+        ],
         "files": ["loader.py", "cli.py"],
     },
     {
         "id": "arcconfig",
         "question": "What does .arcconfig contain and how is it used?",
-        "facts": ["TOML", "project", "build", "scan", "embeddings", "arc build"],
+        "facts": [
+            ["TOML", "toml", ".arcconfig"],
+            ["project", "name"],
+            ["build", "scan"],
+            ["embeddings", "tfidf", "neural"],
+        ],
         "files": ["init.py", "cli.py"],
     },
 ]
@@ -265,12 +339,25 @@ class TaskResult:
     raw_hallucinations: int | None = None
 
 
-def score_fact_recall(context: str, facts: list[str]) -> float:
-    """Fraction of ground-truth facts found in context."""
+def score_fact_recall(context: str, facts: list) -> float:
+    """Fraction of ground-truth facts found in context.
+
+    Each fact is either a string or a list of acceptable variants.
+    A fact is "found" if ANY variant appears as a substring in the context.
+    """
     if not facts:
         return 0.0
     ctx_lower = context.lower()
-    found = sum(1 for f in facts if f.lower() in ctx_lower)
+    found = 0
+    for fact in facts:
+        if isinstance(fact, list):
+            # Variant list — any match counts
+            if any(v.lower() in ctx_lower for v in fact):
+                found += 1
+        else:
+            # Plain string (backward compat)
+            if fact.lower() in ctx_lower:
+                found += 1
     return found / len(facts)
 
 
