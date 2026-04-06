@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 <!-- COVERAGE-BADGE-START -->
-[![Tested](https://img.shields.io/badge/tested-88%25%20coverage-brightgreen)](tests/)
+[![Tested](https://img.shields.io/badge/tested-89%25%20coverage-brightgreen)](tests/)
 <!-- COVERAGE-BADGE-END -->
 [![Stars](https://img.shields.io/github/stars/PJuniszewski/ARC)](https://github.com/PJuniszewski/ARC)
 
