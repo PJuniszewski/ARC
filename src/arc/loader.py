@@ -574,8 +574,11 @@ def restore_sources(
         # Reconstruct file content from text units
         content = "\n\n".join(tu.content for tu in units)
 
-        # Write to output preserving relative path
-        out_path = output_dir / locator
+        # Write to output preserving relative path (with path traversal protection)
+        out_path = (output_dir / locator).resolve()
+        if not str(out_path).startswith(str(output_dir.resolve())):
+            logger.warning("path traversal blocked: %s", locator)
+            continue
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")
 
