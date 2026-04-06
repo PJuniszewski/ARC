@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo-dark.jpeg" alt="ARC — Agent Reasoning Context" width="480">
+</p>
+
 # ARC - Agent Reasoning Context
 
 [![CI](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml/badge.svg)](https://github.com/PJuniszewski/agent-archive/actions/workflows/test.yml)
