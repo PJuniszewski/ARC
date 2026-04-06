@@ -51,7 +51,7 @@ def snapshot(
 
     # Sort by timestamp (non-empty timestamps first, then lexicographic), take last N
     claims = sorted(claims, key=lambda c: (c.timestamp or "", c.id))
-    claims = claims[-last:]
+    claims = claims[-last:] if last > 0 else []
 
     # Filter decisions
     decisions = loaded.decisions

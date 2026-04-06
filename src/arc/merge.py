@@ -64,29 +64,31 @@ def merge(
         su_by_id[tu.id] = tu
     source_units = list(su_by_id.values())
 
-    # --- Merge claims (dedup by text) ---
-    seen_texts: dict[str, Claim] = {}
+    # --- Merge claims ---
+    # Dedup by (text + source). Same text from DIFFERENT sources is kept
+    # (it's a confirmation, not a duplicate). Same text from SAME source is deduped.
+    seen_keys: dict[tuple[str, str], Claim] = {}
     id_remap: dict[str, str] = {}  # dropped_id → surviving_id
     decisions_a: list[Claim] = []
     decisions_b: list[Claim] = []
     merged_claims: list[Claim] = []
 
     for c in a.claims:
-        key = c.text.strip().lower()
-        if key not in seen_texts:
-            seen_texts[key] = c
+        key = (c.text.strip().lower(), c.source)
+        if key not in seen_keys:
+            seen_keys[key] = c
             merged_claims.append(c)
             if c.claim_type == "decision":
                 decisions_a.append(c)
 
     duplicates = 0
     for c in b.claims:
-        key = c.text.strip().lower()
-        if key in seen_texts:
+        key = (c.text.strip().lower(), c.source)
+        if key in seen_keys:
             duplicates += 1
-            id_remap[c.id] = seen_texts[key].id
+            id_remap[c.id] = seen_keys[key].id
         else:
-            seen_texts[key] = c
+            seen_keys[key] = c
             merged_claims.append(c)
             if c.claim_type == "decision":
                 decisions_b.append(c)

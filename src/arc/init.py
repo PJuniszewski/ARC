@@ -166,7 +166,7 @@ def pick_defaults(project_type: str, size: dict, project_dir: Path) -> dict:
     try:
         from .embeddings import try_load_sentence_transformer
         has_neural = try_load_sentence_transformer() is not None
-    except Exception:
+    except (ImportError, OSError, RuntimeError):
         has_neural = False
 
     # Use TF-IDF for large projects (faster) or when neural not available

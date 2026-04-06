@@ -110,16 +110,30 @@ class TestMerge:
 
         loaded = load(str(out))
         obs = [c for c in loaded.claims if c.claim_type == "observation"]
-        # a1 and b3 have same text → deduped to 1. b1 is unique. Total: 2 observations.
+        # a1 and b3 have same text but DIFFERENT sources → both kept (confirmation).
+        # b1 is unique. Total: 3 observations.
+        assert len(obs) == 3
+
+    def test_same_source_deduped(self, two_archives, tmp_path):
+        """Same text from same source is deduped. Different sources are kept."""
+        from arc.create import create_archive as _create
+        a_arc = tmp_path / "same-src-a.arc"
+        _create(str(a_arc), [
+            Claim(text="duplicate", claim_type="observation", source="agent-x"),
+            Claim(text="duplicate", claim_type="observation", source="agent-x"),
+        ])
+        b_arc = tmp_path / "same-src-b.arc"
+        _create(str(b_arc), [
+            Claim(text="duplicate", claim_type="observation", source="agent-y"),
+        ])
+        out = tmp_path / "dedup.arc"
+        result, _ = merge(str(a_arc), str(b_arc), str(out))
+        loaded = load(str(out))
+        # agent-x said it twice → deduped to 1. agent-y confirms → kept. Total: 2.
+        obs = [c for c in loaded.claims if c.text == "duplicate"]
         assert len(obs) == 2
-
-    def test_duplicate_claims_deduped(self, two_archives, tmp_path):
-        a, b = two_archives
-        out = tmp_path / "merged.arc"
-        result, _ = merge(a, b, str(out))
-
-        # "app uses no authentication" appears in both → deduped
-        assert result.duplicates_removed >= 1
+        sources = {c.source for c in obs}
+        assert sources == {"agent-x", "agent-y"}
 
     def test_conflicting_decisions_flagged(self, two_archives, tmp_path):
         a, b = two_archives
@@ -154,8 +168,8 @@ class TestMerge:
 
         assert result.claims_a == 3
         assert result.claims_b == 3
-        # 3 from A + 2 unique from B + conflicts
-        assert result.merged_claims >= 5
+        # 3 from A + 3 from B (same text different source = kept) + conflicts
+        assert result.merged_claims >= 6
 
     def test_merge_has_embeddings(self, two_archives, tmp_path):
         a, b = two_archives
@@ -184,7 +198,7 @@ class TestMerge:
 
 
     def test_merge_remaps_references_on_dedup(self, tmp_path):
-        """When a claim is deduped, references to its ID should be remapped."""
+        """When a claim is deduped (same text+source), references are remapped."""
         from arc.create import create_archive
 
         arc_a = tmp_path / "remap-a.arc"
@@ -196,9 +210,9 @@ class TestMerge:
         arc_b = tmp_path / "remap-b.arc"
         create_archive(str(arc_b), [
             Claim(id="b-obs", text="the app has no auth",
-                  claim_type="observation", source="agent-b"),
+                  claim_type="observation", source="agent-a"),  # same source → deduped
             Claim(id="b-dec", text="should add auth", claim_type="decision",
-                  source="agent-b", references=["b-obs"]),
+                  source="agent-a", references=["b-obs"]),
         ])
 
         out = tmp_path / "remapped.arc"

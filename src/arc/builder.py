@@ -319,6 +319,8 @@ def build_archive(
     # Write manifest
     _progress("8/8", "Writing manifest...")
     write_manifest_to_cas(manifest, cas)
+    if hasattr(cas, "close"):
+        cas.close()
 
     _progress("done", "Archive built")
     return BuildResult(

@@ -121,6 +121,9 @@ def assemble_archive(
         parent_archive=parent_archive,
     )
     write_manifest_to_cas(manifest, cas)
+    # Close SQLite connections to flush WAL and release file lock
+    if hasattr(cas, "close"):
+        cas.close()
     return manifest
 
 
