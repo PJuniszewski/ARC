@@ -3,22 +3,26 @@
 # --- Selective loading thresholds ---
 
 # Minimum hybrid score for a claim to be included in primary selection
-MIN_SCORE: float = 0.15
+MIN_SCORE: float = 0.05
 
 # Minimum hybrid score for evidence graph expansion candidates
-EXPANSION_MIN: float = 0.10
+EXPANSION_MIN: float = 0.03
 
-# Maximum claims returned from task-based filtering (floor; scales with archive)
-MAX_FILTERED_CLAIMS: int = 20
+# Maximum claims returned from task-based filtering
+# For archives < 500 claims: no limit (return all above MIN_SCORE)
+# For larger: max(50, total * 0.3)
+MAX_FILTERED_CLAIMS: int = 50
 
-# Top-K claims to consider in primary selection (floor; scales with archive)
-TOP_K_BASE: int = 10
+# Top-K claims to consider in primary selection
+# For archives < 500 claims: all claims
+# For larger: max(25, total * 0.15)
+TOP_K_BASE: int = 25
 
 # Minimum top-K floor regardless of archive size
-TOP_K_FLOOR: int = 5
+TOP_K_FLOOR: int = 10
 
 # Fraction of total claims used to compute dynamic top-K
-TOP_K_RATIO: float = 0.15
+TOP_K_RATIO: float = 0.3
 
 # --- BFS graph traversal ---
 
@@ -26,7 +30,7 @@ TOP_K_RATIO: float = 0.15
 BFS_EXPANSION_MIN: float = 0.10
 
 # Maximum results from BFS graph traversal
-MAX_BFS_RESULTS: int = 30
+MAX_BFS_RESULTS: int = 100
 
 # --- Keyword scoring ---
 

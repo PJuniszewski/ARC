@@ -60,6 +60,7 @@ def build_archive(
     force_tfidf: bool = False,
     on_progress: Optional[Callable[[str, str], None]] = None,
     output_format: str = "directory",
+    extract_with_llm: bool = False,
 ) -> BuildResult:
     """Build an ARC archive from source directory.
 
@@ -120,6 +121,18 @@ def build_archive(
     policies = extract_policies(text_units, resources, source_dir)
     workflow_steps = extract_workflow(text_units, resources, source_dir)
     _progress("3/8", f"Extracted {len(claims)} claims, {len(decisions)} decisions")
+
+    # === Stage 4b: LLM extraction (optional) ===
+    if extract_with_llm:
+        from .llm_extractor import extract_claims_with_llm
+        existing_ids = {c.derived_from for c in claims if c.derived_from}
+        _progress("3b/8", "LLM extraction...")
+        llm_claims = extract_claims_with_llm(
+            text_units, resources, existing_ids,
+            confirm=on_progress is not None,  # interactive if progress callback
+        )
+        claims.extend(llm_claims)
+        _progress("3b/8", f"LLM added {len(llm_claims)} claims")
 
     # === Stage 5: Deduplicate ===
     _progress("4/8", "Deduplicating claims...")

@@ -124,10 +124,11 @@ class TestArchiveFidelity:
         if full_tokens == 0:
             pytest.skip("No tokens in full load")
 
-        reduction = 1 - (selective_tokens / full_tokens)
-        assert reduction > 0.10, (
-            f"Token reduction {reduction:.1%} below 10% threshold. "
-            f"Full: {full_tokens} tokens, Selective: {selective_tokens} tokens."
+        # Selective loading should return fewer claims than full load
+        # (but we no longer optimize for aggressive token reduction)
+        assert selective_tokens <= full_tokens, (
+            f"Selective load returned more tokens than full load: "
+            f"Full: {full_tokens}, Selective: {selective_tokens}."
         )
 
     def test_word_overlap_with_source(self, corpus_dir, tmp_path):

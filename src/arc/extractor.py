@@ -209,8 +209,6 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
             if m:
                 const_name, const_val = m.group(1), m.group(2).strip()
                 claim_text = f"{const_name} = {const_val}"
-                if len(claim_text) > 200:
-                    claim_text = claim_text[:197] + "..."
                 if claim_text not in seen_texts:
                     seen_texts.add(claim_text)
                     claims.append(
@@ -224,6 +222,45 @@ def extract_claims(text_units: list[TextUnit]) -> list[Claim]:
                             derived_from=tu.id,
                         )
                     )
+
+    # --- Rule 4: Class summary claims ---
+    # Group function chunks by resource to find class definitions
+    by_resource: dict[str, list[TextUnit]] = {}
+    for tu in text_units:
+        by_resource.setdefault(tu.resource_id, []).append(tu)
+
+    for resource_id, units in by_resource.items():
+        for tu in units:
+            if tu.kind != "function":
+                continue
+            first_line = tu.content.strip().splitlines()[0] if tu.content.strip() else ""
+            if not re.match(r"^\s*class\s+(\w+)", first_line):
+                continue
+            class_name = re.match(r"^\s*class\s+(\w+)", first_line).group(1)
+            # Find methods defined in this class (indented def lines)
+            methods = re.findall(r"^\s+def\s+(\w+)\s*\(", tu.content, re.MULTILINE)
+            if not methods:
+                continue
+            # Build class summary
+            docstring = _extract_first_docstring(tu.content)
+            desc = f"{class_name}: {docstring}" if docstring else class_name
+            method_list = ", ".join(m for m in methods if not m.startswith("_"))
+            if not method_list:
+                method_list = ", ".join(methods[:5])
+            claim_text = f"{desc}. Methods: {method_list}"
+            if claim_text not in seen_texts:
+                seen_texts.add(claim_text)
+                claims.append(
+                    Claim(
+                        id=_generate_id(f"class:{class_name}"),
+                        text=claim_text,
+                        kind="definition",
+                        evidence=[EvidencePointer(source_unit_id=tu.id, span=tu.span, weight=1.0)],
+                        confidence=0.9,
+                        status="observed",
+                        derived_from=tu.id,
+                    )
+                )
 
     return claims
 

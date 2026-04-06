@@ -168,6 +168,7 @@ def load(
     expected_min_version: Optional[str] = None,
     claim_type: Optional[str] = None,
     source: Optional[str] = None,
+    full: bool = False,
 ) -> LoadedArchive:
     """Load and optionally filter archive content.
 
@@ -294,7 +295,7 @@ def load(
     # Task-based filtering: use embeddings to select relevant claims
     if task and loaded.vector_store and loaded.claims:
         total_before = len(loaded.claims)
-        loaded.claims = _filter_by_task(loaded, task)
+        loaded.claims = _filter_by_task(loaded, task, full=full)
         logger.info(
             "filtered claims for task=%r: %d → %d",
             task[:80], total_before, len(loaded.claims),
@@ -350,7 +351,7 @@ def _substring_boost(query_tokens: set[str], claim_text: str) -> float:
     return min(hits * 0.15, 0.4) if query_tokens else 0.0
 
 
-def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
+def _filter_by_task(loaded: LoadedArchive, task: str, full: bool = False) -> list[Claim]:
     """Filter claims by task relevance using hybrid keyword + vector scoring."""
     if not loaded.vector_store or loaded.vector_store.vectors is None:
         return loaded.claims
@@ -416,10 +417,15 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
     # Sort by hybrid score descending
     scored.sort(key=lambda x: x[1], reverse=True)
 
-    # Take top-k with minimum score threshold
-    # Dynamic TOP_K: scale with archive size
-    TOP_K = max(TOP_K_BASE, int(len(loaded.claims) * TOP_K_RATIO))
-    results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= MIN_SCORE]
+    # In --full mode: return everything above near-zero threshold
+    # Default mode: dynamic limits based on archive size
+    total = len(loaded.claims)
+    min_threshold = 0.01 if full else MIN_SCORE
+    if full or total < 500:
+        results = [(cid, s, t) for cid, s, t in scored if s >= min_threshold]
+    else:
+        TOP_K = max(TOP_K_BASE, int(total * TOP_K_RATIO))
+        results = [(cid, s, t) for cid, s, t in scored[:TOP_K] if s >= min_threshold]
     if not results and scored:
         results = scored[:3]
 
@@ -477,12 +483,13 @@ def _filter_by_task(loaded: LoadedArchive, task: str) -> list[Claim]:
             selected.append(claim)
             seen.add(claim.id)
 
-    # Hard cap: scale with archive size
-    MAX_TOTAL = max(MAX_FILTERED_CLAIMS, int(len(loaded.claims) * 0.25))
+    # Hard cap: in full mode, no cap at all. For large archives, apply limit.
     pre_cap = len(selected)
-    if len(selected) > MAX_TOTAL:
-        selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
-        selected = selected[:MAX_TOTAL]
+    if not full and total >= 500:
+        MAX_TOTAL = max(MAX_FILTERED_CLAIMS, int(total * 0.3))
+        if len(selected) > MAX_TOTAL:
+            selected.sort(key=lambda c: score_by_id.get(c.id, 0), reverse=True)
+            selected = selected[:MAX_TOTAL]
 
     if selected:
         top_score = max(score_by_id.get(c.id, 0) for c in selected)

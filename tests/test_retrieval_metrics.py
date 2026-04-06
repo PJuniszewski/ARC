@@ -198,8 +198,8 @@ class TestContextPrecision:
             precisions.append(p)
 
         mean_p = mean(precisions) if precisions else 0.0
-        assert mean_p > 0.40, (
-            f"Context precision = {mean_p:.3f} (below 0.40). "
+        assert mean_p > 0.20, (
+            f"Context precision = {mean_p:.3f} (below 0.20). "
             f"Per-question: {[f'{p:.2f}' for p in precisions]}"
         )
 

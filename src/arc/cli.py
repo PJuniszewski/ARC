@@ -43,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("--parent", default=None, help="Parent archive for incremental build")
     build_parser.add_argument("--format", default="sqlite", choices=["sqlite", "directory"],
                               help="Archive format (default: sqlite single-file)")
+    build_parser.add_argument("--extract-with-llm", action="store_true",
+                              help="Use LLM to extract claims from code chunks without good rule-based claims")
+    build_parser.add_argument("--yes", action="store_true",
+                              help="Skip confirmation prompts (for --extract-with-llm)")
 
     # arc inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect archive contents")
@@ -68,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
                              choices=["observation", "decision", "uncertainty", "dependency", "conflict"],
                              help="Filter claims by type")
     load_parser.add_argument("--source", default=None, help="Filter claims by source agent ID")
+    load_parser.add_argument("--full", action="store_true",
+                             help="Maximum recall: return all claims above minimum threshold")
 
     # arc snapshot
     snap_parser = subparsers.add_parser("snapshot", help="Create lightweight snapshot from archive")
@@ -186,6 +192,7 @@ def _cmd_build(args) -> int:
         force_tfidf=force_tfidf,
         on_progress=_on_progress,
         output_format=getattr(args, "format", "sqlite"),
+        extract_with_llm=getattr(args, "extract_with_llm", False),
     )
 
     elapsed = time.monotonic() - t0
@@ -279,6 +286,7 @@ def _cmd_load(args) -> int:
         task=args.task,
         claim_type=getattr(args, "claim_type", None),
         source=getattr(args, "source", None),
+        full=getattr(args, "full", False),
     )
 
     if loaded.rejected:
