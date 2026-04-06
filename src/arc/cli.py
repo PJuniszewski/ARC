@@ -62,6 +62,26 @@ def main(argv: list[str] | None = None) -> int:
         "--code", action="store_true", help="Filter to code files only (exclude .md, .txt, .json, .yaml)"
     )
     load_parser.add_argument("--ext", default=None, help="Filter to specific extension (e.g. --ext .kt)")
+    load_parser.add_argument("--type", default=None, dest="claim_type",
+                             choices=["observation", "decision", "uncertainty", "dependency", "conflict"],
+                             help="Filter claims by type")
+    load_parser.add_argument("--source", default=None, help="Filter claims by source agent ID")
+
+    # arc snapshot
+    snap_parser = subparsers.add_parser("snapshot", help="Create lightweight snapshot from archive")
+    snap_parser.add_argument("archive", help="Source archive path")
+    snap_parser.add_argument("--last", type=int, default=10, help="Number of recent claims to include")
+    snap_parser.add_argument("--out", required=True, help="Output snapshot path")
+    snap_parser.add_argument("--type", default=None, dest="claim_type",
+                             choices=["observation", "decision", "uncertainty", "dependency", "conflict"],
+                             help="Filter claims by type")
+    snap_parser.add_argument("--source", default=None, help="Filter claims by source agent ID")
+
+    # arc merge
+    merge_parser = subparsers.add_parser("merge", help="Merge two archives")
+    merge_parser.add_argument("archive_a", help="First archive")
+    merge_parser.add_argument("archive_b", help="Second archive")
+    merge_parser.add_argument("--out", required=True, help="Output merged archive path")
 
     # arc diff
     diff_parser = subparsers.add_parser("diff", help="Compare two archives")
@@ -85,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         "inspect": _cmd_inspect,
         "verify": _cmd_verify,
         "load": _cmd_load,
+        "snapshot": _cmd_snapshot,
+        "merge": _cmd_merge,
         "diff": _cmd_diff,
         "restore": _cmd_restore,
     }
@@ -219,6 +241,8 @@ def _cmd_load(args) -> int:
         archive_path=args.archive,
         layers=args.layer,
         task=args.task,
+        claim_type=getattr(args, "claim_type", None),
+        source=getattr(args, "source", None),
     )
 
     if loaded.rejected:
@@ -265,8 +289,9 @@ def _print_claim_results(loaded, task: str) -> None:
             loc = res.locator if res else "?"
             source_hint = f"  {loc}:{su.span[0]}-{su.span[1]}"
 
-        kind_label = claim.kind.upper()
-        print(f"\n  {i}. [{kind_label}]{source_hint}")
+        type_label = claim.claim_type.upper()
+        src_label = f" @{claim.source}" if claim.source else ""
+        print(f"\n  {i}. [{type_label}]{src_label}{source_hint}")
         _print_wrapped(claim.text, indent=5, width=76)
 
 
@@ -354,6 +379,36 @@ def _print_wrapped(text: str, indent: int = 4, width: int = 76) -> None:
                 line = line + " " + word if line.strip() else prefix + word
         if line.strip():
             print(line)
+
+
+def _cmd_snapshot(args) -> int:
+    import time
+
+    from .snapshot import snapshot
+
+    t0 = time.monotonic()
+    manifest = snapshot(
+        source_archive=args.archive,
+        output_path=args.out,
+        last=args.last,
+        claim_type=getattr(args, "claim_type", None),
+        source=getattr(args, "source", None),
+    )
+    elapsed = time.monotonic() - t0
+
+    print(f"Snapshot created: {args.out}  ({elapsed:.1f}s)")
+    print(f"  Layers: {len(manifest.layers)}")
+    print(f"  Parent: {manifest.parent_archive[:16]}..." if manifest.parent_archive else "  Parent: none")
+    return 0
+
+
+def _cmd_merge(args) -> int:
+    from .merge import merge
+
+    result, manifest = merge(args.archive_a, args.archive_b, args.out)
+    print(result.summary())
+    print(f"\n  Output: {args.out}")
+    return 0
 
 
 def _cmd_diff(args) -> int:

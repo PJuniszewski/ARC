@@ -103,32 +103,43 @@ class TextUnit:
 
 
 CLAIM_STATUSES = {"observed", "derived", "verified", "deprecated", "contested"}
+CLAIM_TYPES = {"observation", "decision", "uncertainty", "dependency", "conflict"}
 
 
 @dataclass
 class Claim:
-    """An atomic assertion extracted from source units."""
+    """An atomic assertion extracted from source units or produced by an agent."""
 
     id: str = field(default_factory=_generate_id)
     text: str = ""
     kind: str = "fact"  # fact | assertion | requirement | definition
+    claim_type: str = "observation"  # observation | decision | uncertainty | dependency | conflict
+    source: str = "builder"  # agent id, "human", or "builder"
+    timestamp: str = ""  # ISO8601; set by builder or agent
     evidence: list[EvidencePointer] = field(default_factory=list)
     confidence: float = 1.0
     status: str = "observed"  # observed | derived | verified | deprecated | contested
     derived_from: Optional[str] = None  # source_unit_id for simple cases
+    references: list[str] = field(default_factory=list)  # IDs of related claims (e.g. conflict refs)
 
     def __post_init__(self):
         if self.status not in CLAIM_STATUSES:
             raise ValueError(f"Invalid claim status: {self.status}")
+        if self.claim_type not in CLAIM_TYPES:
+            raise ValueError(f"Invalid claim type: {self.claim_type}")
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {
             "id": self.id,
             "text": self.text,
             "kind": self.kind,
+            "claim_type": self.claim_type,
+            "source": self.source,
+            "timestamp": self.timestamp,
             "evidence": [e.to_dict() for e in self.evidence],
             "confidence": self.confidence,
             "status": self.status,
+            "references": self.references,
         }
         if self.derived_from:
             d["derived_from"] = self.derived_from
@@ -138,6 +149,11 @@ class Claim:
     def from_dict(cls, d: dict) -> Claim:
         d = dict(d)
         d["evidence"] = [EvidencePointer.from_dict(e) for e in d.get("evidence", [])]
+        known = {
+            "id", "text", "kind", "claim_type", "source", "timestamp",
+            "evidence", "confidence", "status", "derived_from", "references",
+        }
+        d = {k: v for k, v in d.items() if k in known}
         return cls(**d)
 
 
@@ -156,6 +172,8 @@ class Decision:
     consequences: list[str] = field(default_factory=list)
     evidence: list[EvidencePointer] = field(default_factory=list)
     status: str = "accepted"  # proposed | accepted | superseded | rejected
+    source: str = "builder"  # agent id, "human", or "builder"
+    timestamp: str = ""  # ISO8601; set by builder or agent
 
     def __post_init__(self):
         if self.status not in DECISION_STATUSES:
@@ -171,12 +189,19 @@ class Decision:
             "consequences": self.consequences,
             "evidence": [e.to_dict() for e in self.evidence],
             "status": self.status,
+            "source": self.source,
+            "timestamp": self.timestamp,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> Decision:
         d = dict(d)
         d["evidence"] = [EvidencePointer.from_dict(e) for e in d.get("evidence", [])]
+        known = {
+            "id", "title", "context", "options", "decision", "consequences",
+            "evidence", "status", "source", "timestamp",
+        }
+        d = {k: v for k, v in d.items() if k in known}
         return cls(**d)
 
 

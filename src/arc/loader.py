@@ -161,6 +161,8 @@ def load(
     layers: Optional[list[str]] = None,
     task: Optional[str] = None,
     expected_min_version: Optional[str] = None,
+    claim_type: Optional[str] = None,
+    source: Optional[str] = None,
 ) -> LoadedArchive:
     """Load and optionally filter archive content.
 
@@ -169,6 +171,8 @@ def load(
         layers: Specific layers to load (e.g., ["claims", "decisions"])
         task: Task description for selective loading via embeddings
         expected_min_version: Minimum version for rollback protection
+        claim_type: Filter claims by type (observation/decision/uncertainty/dependency/conflict)
+        source: Filter claims by source agent ID
     """
     archive_path = Path(archive_path)
     cas = ContentAddressedStore(archive_path)
@@ -273,6 +277,35 @@ def load(
             "filtered claims for task=%r: %d → %d",
             task[:80], total_before, len(loaded.claims),
         )
+
+    # Filter by claim_type and/or source
+    if claim_type and loaded.claims:
+        loaded.claims = [c for c in loaded.claims if c.claim_type == claim_type]
+    if source and loaded.claims:
+        loaded.claims = [c for c in loaded.claims if c.source == source]
+    # When filtering by type=decision, also surface Decision objects as claims
+    if claim_type == "decision" and loaded.decisions:
+        _dec_status_map = {
+            "proposed": "observed", "accepted": "verified",
+            "superseded": "deprecated", "rejected": "deprecated",
+        }
+        for d in loaded.decisions:
+            if source and d.source != source:
+                continue
+            loaded.claims.append(Claim(
+                id=d.id,
+                text=f"{d.title}: {d.decision}" if d.decision else d.title,
+                kind="assertion",
+                claim_type="decision",
+                source=d.source,
+                timestamp=d.timestamp,
+                evidence=list(d.evidence),
+                confidence=1.0,
+                status=_dec_status_map.get(d.status, "observed"),
+            ))
+    # Also filter decisions by source if requested
+    if source and loaded.decisions:
+        loaded.decisions = [d for d in loaded.decisions if d.source == source]
 
     return loaded
 

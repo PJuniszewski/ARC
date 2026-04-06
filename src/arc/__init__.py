@@ -11,9 +11,13 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 # Public API
 from .builder import BuildResult, build_archive
 from .cas import ContentAddressedStore, VerificationResult, sha256_digest
+from .create import create_archive
 from .diff import diff_archives
+from .merge import merge
 from .loader import LoadedArchive, load, restore_sources, verify
+from .snapshot import snapshot
 from .models import (
+    CLAIM_TYPES,
     Claim,
     Decision,
     EvidencePointer,
@@ -34,14 +38,21 @@ __all__ = [
     "ContentAddressedStore",
     "VerificationResult",
     "sha256_digest",
+    # Create
+    "create_archive",
     # Diff
     "diff_archives",
+    # Merge
+    "merge",
     # Loader
     "load",
     "verify",
     "restore_sources",
     "LoadedArchive",
+    # Snapshot
+    "snapshot",
     # Models
+    "CLAIM_TYPES",
     "Claim",
     "Decision",
     "EvidencePointer",
