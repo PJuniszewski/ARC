@@ -105,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     init_parser.add_argument("--json", action="store_true", dest="json_output",
                              help="Structured JSON output (for agent consumption)")
 
+    # arc mcp-serve
+    subparsers.add_parser("mcp-serve", help="Start MCP server (stdio transport)")
+
     # arc restore
     restore_parser = subparsers.add_parser("restore", help="Restore source files from archive")
     restore_parser.add_argument("archive", help="Archive path")
@@ -125,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         "merge": _cmd_merge,
         "diff": _cmd_diff,
         "init": _cmd_init,
+        "mcp-serve": _cmd_mcp_serve,
         "restore": _cmd_restore,
     }
     handler = dispatch.get(args.command)
@@ -610,6 +614,17 @@ def _cmd_init(args) -> int:
         print(f"    {q}")
 
     return 0
+
+
+def _cmd_mcp_serve(args) -> int:
+    try:
+        from .mcp_server import main as mcp_main
+        import asyncio
+        asyncio.run(mcp_main())
+        return 0
+    except ImportError:
+        print("Error: MCP SDK not installed. Run: pip install mcp", file=sys.stderr)
+        return 1
 
 
 def _cmd_restore(args) -> int:
