@@ -74,7 +74,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "arc_path": {"type": "string", "description": "Path to .arc file"},
-                "task": {"type": "string", "description": "Natural language query"},
+                "task": {"type": "string", "description": "Natural language query (omit to return all claims)"},
                 "claim_type": {
                     "type": "string",
                     "enum": ["observation", "decision", "uncertainty", "dependency", "conflict"],
@@ -87,7 +87,7 @@ TOOLS = [
                     "description": "Return all claims above minimum threshold (maximum recall)",
                 },
             },
-            "required": ["arc_path", "task"],
+            "required": ["arc_path"],
         },
     ),
     Tool(
@@ -256,7 +256,7 @@ def _tool_load(args: dict) -> dict:
     from .loader import load
 
     arc_path = args["arc_path"]
-    task = args["task"]
+    task = args.get("task")
     claim_type = args.get("claim_type")
     source = args.get("source")
     full = args.get("full", False)

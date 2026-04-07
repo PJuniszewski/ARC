@@ -89,4 +89,5 @@ ignore = [
 "src/arc/loader.py" = ["E402"]
 "src/arc/extractor.py" = ["E501"]
 "scripts/*" = ["E501"]
+"eval/*" = ["E501"]
 "tests/*" = ["F401", "F841", "E501"]
