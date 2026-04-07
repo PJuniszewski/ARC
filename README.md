@@ -173,18 +173,6 @@ Source -> Builder -> .arc artifact -> Loader -> Agent runtime
 <!-- BENCHMARK-START -->
 30 tasks per repo, 6 categories. Context recall = fraction of required facts found.
 
-### FastAPI (15K LOC, 130 files)
-
-| System | Context Recall | Traceability | Debuggability | Token Efficiency |
-|--------| ------------- | ------------- | ------------- | ------------- |
-| hybrid | 0.500 | 0.000 | 0.000 | 0.995 |
-| **hybrid_arc** | **0.450** | **1.000** | **0.940** | **0.997** |
-| vector | 0.450 | 0.000 | 0.000 | 0.999 |
-| arc | 0.300 | 1.000 | 0.000 | 0.672 |
-| tfidf | 0.450 | 0.000 | 0.000 | 0.999 |
-
-hybrid_arc vs hybrid: d = -0.147 (negligible)
-
 Full analysis: [`docs/benchmark-fastapi-vs-django.md`](docs/benchmark-fastapi-vs-django.md)
 <!-- BENCHMARK-END -->
 
