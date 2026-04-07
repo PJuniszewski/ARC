@@ -105,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     init_parser.add_argument("--json", action="store_true", dest="json_output",
                              help="Structured JSON output (for agent consumption)")
 
-    # arc mcp-serve
+    # arc serve / arc mcp-serve
+    subparsers.add_parser("serve", help="Start MCP server (stdio transport)")
     subparsers.add_parser("mcp-serve", help="Start MCP server (stdio transport)")
 
     # arc restore
@@ -128,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         "merge": _cmd_merge,
         "diff": _cmd_diff,
         "init": _cmd_init,
+        "serve": _cmd_mcp_serve,
         "mcp-serve": _cmd_mcp_serve,
         "restore": _cmd_restore,
     }

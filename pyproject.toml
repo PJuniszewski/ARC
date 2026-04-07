@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arc-context"
-version = "1.2.0"
+version = "1.3.0"
 description = "ARC (Agent Reasoning Context) — portable, verifiable context packaging for AI agents"
 license = "Apache-2.0"
 readme = "README.md"
@@ -34,10 +34,16 @@ Repository = "https://github.com/PJuniszewski/agent-archive"
 Issues = "https://github.com/PJuniszewski/agent-archive/issues"
 
 [project.optional-dependencies]
+mcp = [
+    "mcp>=1.0",
+]
 ml = [
     "sentence-transformers>=2.2",
     "scikit-learn>=1.3",
     "bert-score>=0.3",
+]
+llm = [
+    "sentence-transformers>=2.2",
 ]
 eval = [
     "ragas>=0.4",
@@ -45,8 +51,8 @@ eval = [
     "instructor",
     "sentence-transformers>=2.2",
 ]
-llm = [
-    "anthropic>=0.40",
+all = [
+    "arc-context[mcp,ml,llm]",
 ]
 dev = [
     "pytest>=7.0",

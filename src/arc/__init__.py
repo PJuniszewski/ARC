@@ -2,7 +2,7 @@
 
 import logging
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Configure library logging — NullHandler by default so applications
 # can attach their own handlers without seeing unexpected output.

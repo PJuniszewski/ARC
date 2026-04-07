@@ -2,22 +2,36 @@
 
 ARC exposes its operations as MCP tools so any compatible agent (Claude Code, Cursor, Windsurf, Codex) can build, query, and merge context artifacts without shelling out to the CLI.
 
-## Install
+## Quick start
 
 ```bash
-pip install arc-context mcp
+pip install arc-context[mcp]
+
+# Option A: Add to Claude Code via CLI
+claude mcp add arc -- python -m arc.mcp_server
+
+# Option B: Add manually to .claude/mcp.json (see below)
+
+# Option C: Run directly
+arc serve
 ```
 
 ## Start
 
 ```bash
-arc mcp-serve                    # via CLI
+arc serve                        # via CLI (alias for mcp-serve)
+arc mcp-serve                    # same thing
 python -m arc.mcp_server         # directly
 ```
 
 ## Connect from Claude Code
 
-Add to `.claude/mcp.json`:
+Via CLI (easiest):
+```bash
+claude mcp add arc -- python -m arc.mcp_server
+```
+
+Or add to `.claude/mcp.json`:
 
 ```json
 {

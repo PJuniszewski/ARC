@@ -65,7 +65,10 @@ performance.arc┘
 ## Install
 
 ```bash
-pip install arc-context
+pip install arc-context              # core (works offline, no dependencies)
+pip install arc-context[mcp]         # + MCP server for Claude Code / Cursor
+pip install arc-context[llm]         # + neural embeddings (sentence-transformers)
+pip install arc-context[all]         # everything
 ```
 
 ---

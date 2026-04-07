@@ -22,9 +22,14 @@ import logging
 import traceback
 from pathlib import Path
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+try:
+    from mcp.server import Server
+    from mcp.server.stdio import stdio_server
+    from mcp.types import TextContent, Tool
+except ImportError:
+    raise ImportError(
+        "MCP support requires the mcp package. Install with: pip install arc-context[mcp]"
+    )
 
 logger = logging.getLogger(__name__)
 
